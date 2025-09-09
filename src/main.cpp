@@ -29,7 +29,8 @@
  * モーターL pulse:44, dir:45, ena:46, max:47, min48
  * モーターM pulse:49, dir:50, ena:51, max:52, min53
  * 
- * STM32F411 pin assignments (adjust as needed):
+ * STM32F411 pin assignments (USB CDC ACM for communication):
+ * Communication: USB CDC ACM (native USB, no external USB-UART bridge needed)
  * モーターI pulse:PA0, dir:PA1, ena:PA2, max:PA3, min:PA4
  * モーターJ pulse:PA5, dir:PA6, ena:PA7, max:PB0, min:PB1
  * モーターK pulse:PB10, dir:PB11, ena:PB12, max:PB13, min:PB14
@@ -213,7 +214,7 @@ void gcode_loop() {
                 // Version info
                 ASerial.print("FIRMWARE: TrapdoorFiveMotor v2.0 - ");
 #ifdef STM32F411xx
-                ASerial.println("STM32F411 Enhanced");
+                ASerial.println("STM32F411 Enhanced (USB CDC ACM)");
 #else
                 ASerial.println("AVR Compatible");
 #endif

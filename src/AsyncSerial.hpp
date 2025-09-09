@@ -16,10 +16,11 @@ class AsyncSerial : public Print {
         AsyncSerial(int num) {
 #ifdef STM32F411xx
             // STM32F411 serial port mapping
+            // When USB CDC is enabled, Serial uses USB CDC ACM instead of UART
             switch(num) {
-                case 0:serial = &Serial;break;  // USART2 (PA2/PA3)
-                case 1:serial = &Serial1;break; // USART1 (PA9/PA10)
-                case 2:serial = &Serial2;break; // USART6 (PC6/PC7)
+                case 0:serial = &Serial;break;  // USB CDC ACM (native USB)
+                case 1:serial = &Serial1;break; // USART1 (PA9/PA10) - if needed for other purposes
+                case 2:serial = &Serial2;break; // USART6 (PC6/PC7) - if needed for other purposes
                 default: serial = &Serial;break;
             }
 #else
