@@ -139,19 +139,28 @@ public:
             case STEPPER_READY:
                 digitalWrite(dir_pin, (target_step < position_step)?HIGH:LOW);
                 digitalWrite(ena_pin, HIGH);
-                //即ステート推移可能にする
+                // Immediate state transition for efficiency
                 state = STEPPER_DRIVE_CHECK_SWITCH;
                 break;
                 
             case STEPPER_DRIVE_CHECK_SWITCH:
-                // Immediate limit switch check for safety
-                if (((target_step > position_step) && !get_max_swich())
-                || ((target_step < position_step) && !get_min_swich())) {
-                    emergency_stop();
-                    break;
+                // Critical: Immediate limit switch check for safety (non-blocking)
+                // Allow movement only in safe direction (preserves original behavior)
+                if (target_step > position_step) {
+                    // Moving in positive direction - check max limit
+                    if (!get_max_swich()) {
+                        emergency_stop();
+                        break;
+                    }
+                } else if (target_step < position_step) {
+                    // Moving in negative direction - check min limit  
+                    if (!get_min_swich()) {
+                        emergency_stop();
+                        break;
+                    }
                 }
                 
-                // Check if it's time for next step (timer-based)
+                // Timer-based step scheduling (grbl-style efficiency)
                 if (current_time >= next_step_time) {
                     state = STEPPER_DRIVE_HIGH;
                 }
@@ -164,25 +173,31 @@ public:
                 break;
                 
             case STEPPER_DRIVE_KEEP_HIGH:
-                if ((current_time - prev_micros) > pulse_high_usec) {
+                if ((current_time - prev_micros) >= pulse_high_usec) {
                     state = STEPPER_DRIVE_LOW;
                 }
                 break;
                 
             case STEPPER_DRIVE_LOW:
                 digitalWrite(pul_pin, HIGH);
+                // Update position immediately after pulse
                 if (target_step > position_step) position_step++;
-                if (target_step < position_step) position_step--;
+                else if (target_step < position_step) position_step--;
+                
                 prev_micros = current_time;
-                state = STEPPER_DRIVE_KEEP_LOW;
+                
+                // Check if movement is complete
                 if (position_step == target_step) {
                     state = STEPPER_STOP;
+                    break;
                 }
+                
+                state = STEPPER_DRIVE_KEEP_LOW;
                 break;
                 
             case STEPPER_DRIVE_KEEP_LOW:
-                if ((current_time - prev_micros) > pulse_low_usec) {
-                    // Schedule next step
+                if ((current_time - prev_micros) >= pulse_low_usec) {
+                    // Schedule next step with precise timing
                     next_step_time = current_time + step_interval_usec;
                     state = STEPPER_DRIVE_CHECK_SWITCH;
                 }

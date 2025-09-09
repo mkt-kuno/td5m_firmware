@@ -209,6 +209,15 @@ void gcode_loop() {
                 MotorM.stepper_power(false);
                 report(true);
                 break;
+            case 21:
+                // Version info
+                ASerial.print("FIRMWARE: TrapdoorFiveMotor v2.0 - ");
+#ifdef STM32F411xx
+                ASerial.println("STM32F411 Enhanced");
+#else
+                ASerial.println("AVR Compatible");
+#endif
+                break;
             default:
                 break;
         }
@@ -231,6 +240,13 @@ void report_json(bool forced) {
         ASerial.print(dtostrf(secs(),0,3,dbuf));
         if (state==GCODE_IDLE) ASerial.print(",\"Status\":\"IDLE\",");
         else ASerial.print(",\"Status\":\"BUSY\",");
+        
+#ifdef STM32F411xx
+        ASerial.print("\"MCU\":\"STM32F411\",");
+#else
+        ASerial.print("\"MCU\":\"AVR\",");
+#endif
+        
         ASerial.print("\"I\":");
         ASerial.print(dtostrf(MotorI.get_current_mm(),0,3,dbuf));
         ASerial.print(",\"J\":");
