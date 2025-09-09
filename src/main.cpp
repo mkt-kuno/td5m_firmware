@@ -74,6 +74,12 @@ typedef enum GCODE_STATE {
 } GCODE_STATE_T;
 static GCODE_STATE_T state = GCODE_IDLE;
 
+// EEPROM emulation for STM32F411 using flash memory with wear leveling
+// STM32F411CE has 512KB flash, using last 128KB sector for EEPROM emulation
+// EEPROMWearLevel library provides:
+// - Automatic wear leveling across flash pages
+// - Data integrity with CRC validation  
+// - Cross-platform compatibility (AVR EEPROM / STM32 Flash)
 #define EEPROM_LAYOUT_VERSION 0
 #define EEPROM_INDEX_NUM 20
 enum EEPROM_INDEX {
@@ -81,8 +87,11 @@ enum EEPROM_INDEX {
     EEPROM_INDEX_MOTOR_J,
     EEPROM_INDEX_MOTOR_K,
     EEPROM_INDEX_MOTOR_L,
-    EEPROM_INDEX_MOTOR_M
+    EEPROM_INDEX_MOTOR_M,
+    EEPROM_INDEX_MAGIC = 15  // Magic number for validation
 };
+
+#define EEPROM_MAGIC_NUMBER 0x12345678L
 
 void eeprom_init(void){
     long val = 0;
@@ -91,6 +100,32 @@ void eeprom_init(void){
     EEPROMwl.put(EEPROM_INDEX_MOTOR_K, val);
     EEPROMwl.put(EEPROM_INDEX_MOTOR_L, val);
     EEPROMwl.put(EEPROM_INDEX_MOTOR_M, val);
+    EEPROMwl.put(EEPROM_INDEX_MAGIC, EEPROM_MAGIC_NUMBER);
+}
+
+bool eeprom_is_valid(void){
+    long magic = 0;
+    EEPROMwl.get(EEPROM_INDEX_MAGIC, magic);
+    return (magic == EEPROM_MAGIC_NUMBER);
+}
+
+void eeprom_safe_get(int index, long &value, long default_value = -1){
+    if (eeprom_is_valid()) {
+        EEPROMwl.get(index, value);
+        // Additional validation: check if value is reasonable
+        if (value < -1000000L || value > 1000000L) {
+            value = default_value;
+        }
+    } else {
+        value = default_value;
+    }
+}
+
+void eeprom_safe_put(int index, long value){
+    // Only save if value is reasonable to prevent flash wear
+    if (value >= -1000000L && value <= 1000000L) {
+        EEPROMwl.put(index, value);
+    }
 }
 void report(bool forced=false);
 void motor_loop(void);
@@ -106,18 +141,29 @@ void setup() {
     ASerial.begin(115200);
     ATimer.init();
     ATimer.next_millisec(AUTO_REPORT_MSEC);
+    
+    // Initialize EEPROM with wear leveling for STM32F411 flash
     EEPROMwl.begin(EEPROM_LAYOUT_VERSION, EEPROM_INDEX_NUM);
     
+    // Check if EEPROM data is valid, initialize if needed
+    if (!eeprom_is_valid()) {
+        eeprom_init();
+#ifdef STM32F411xx
+        ASerial.println("INFO: STM32F411 flash-based EEPROM initialized with wear leveling");
+#endif
+    }
+    
+    // Restore motor positions from EEPROM with validation
     long steps = -1;
-    EEPROMwl.get(EEPROM_INDEX_MOTOR_I, steps);
+    eeprom_safe_get(EEPROM_INDEX_MOTOR_I, steps);
     MotorI.set_current_steps(steps);
-    EEPROMwl.get(EEPROM_INDEX_MOTOR_J, steps);
+    eeprom_safe_get(EEPROM_INDEX_MOTOR_J, steps);
     MotorJ.set_current_steps(steps);
-    EEPROMwl.get(EEPROM_INDEX_MOTOR_K, steps);
+    eeprom_safe_get(EEPROM_INDEX_MOTOR_K, steps);
     MotorK.set_current_steps(steps);
-    EEPROMwl.get(EEPROM_INDEX_MOTOR_L, steps);
+    eeprom_safe_get(EEPROM_INDEX_MOTOR_L, steps);
     MotorL.set_current_steps(steps);
-    EEPROMwl.get(EEPROM_INDEX_MOTOR_M, steps);
+    eeprom_safe_get(EEPROM_INDEX_MOTOR_M, steps);
     MotorM.set_current_steps(steps);
 }
 
@@ -143,23 +189,23 @@ void G90_91(GCodeParser *gcode, bool incremental = false) {
 void G52(GCodeParser *gcode) {
     if (gcode->HasWord('I')) {
         MotorI.set_current_mm(gcode->GetWordValue('I'));
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_I, MotorI.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_I, MotorI.get_current_steps());
     }
     if (gcode->HasWord('J')) {
         MotorJ.set_current_mm(gcode->GetWordValue('J'));
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_J, MotorJ.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_J, MotorJ.get_current_steps());
     }
     if (gcode->HasWord('K'))  {
         MotorK.set_current_mm(gcode->GetWordValue('K'));
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_K, MotorK.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_K, MotorK.get_current_steps());
     }
     if (gcode->HasWord('L')) {
         MotorL.set_current_mm(gcode->GetWordValue('L'));
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_L, MotorL.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_L, MotorL.get_current_steps());
     }
     if (gcode->HasWord('M')) {
         MotorM.set_current_mm(gcode->GetWordValue('M'));
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_M, MotorM.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_M, MotorM.get_current_steps());
     }
 }
 
@@ -215,8 +261,15 @@ void gcode_loop() {
                 ASerial.print("FIRMWARE: TrapdoorFiveMotor v2.0 - ");
 #ifdef STM32F411xx
                 ASerial.println("STM32F411 Enhanced (USB CDC ACM)");
+                ASerial.print("STORAGE: Flash-based EEPROM with wear leveling - ");
+                if (eeprom_is_valid()) {
+                    ASerial.println("Valid");
+                } else {
+                    ASerial.println("Needs initialization");
+                }
 #else
                 ASerial.println("AVR Compatible");
+                ASerial.println("STORAGE: Hardware EEPROM");
 #endif
                 break;
             default:
@@ -292,11 +345,12 @@ void motor_loop(){
     if (all_motor_stop() && state != GCODE_IDLE) {
         state = GCODE_IDLE;
         report(true);
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_I, MotorI.get_current_steps());
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_J, MotorJ.get_current_steps());
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_K, MotorK.get_current_steps());
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_L, MotorL.get_current_steps());
-        EEPROMwl.put(EEPROM_INDEX_MOTOR_M, MotorM.get_current_steps());
+        // Save positions with wear leveling for STM32F411 flash
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_I, MotorI.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_J, MotorJ.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_K, MotorK.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_L, MotorL.get_current_steps());
+        eeprom_safe_put(EEPROM_INDEX_MOTOR_M, MotorM.get_current_steps());
     }
 }
 
