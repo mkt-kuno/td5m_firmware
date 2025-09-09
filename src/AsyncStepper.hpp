@@ -10,6 +10,13 @@
 #define STEP_PER_MM             (2400L)
 #define DUMMY_FIRMWARE          (0)
 
+// Timer-based stepper control for efficiency (inspired by Marlin/grbl)
+#ifdef STM32F411xx
+    #define STEPPER_TIMER_FREQUENCY 1000000UL  // 1MHz timer frequency
+#else
+    #define STEPPER_TIMER_FREQUENCY 16000000UL // 16MHz for AVR
+#endif
+
 // Memo
 // Linear Actuator: 2400 steps / mm
 //                    12   rot / mm
@@ -34,6 +41,11 @@ private:
     STEPPER_STATE_T state = STEPPER_STOP;
     unsigned long prev_micros = 0;
     int ena_pin, dir_pin, pul_pin, max_pin, min_pin;
+    
+    // Timer-based control variables (for efficiency improvement)
+    volatile bool step_needed = false;
+    unsigned long step_interval_usec = 0;
+    unsigned long next_step_time = 0;
 
     // About duty cycle
     // 20kHz(50us) when duty cyle is 25 high / 75 low
@@ -48,6 +60,9 @@ private:
             pulse_high_usec = floor(step_microsec / 4);
             pulse_low_usec = floor(step_microsec * 3 / 4);
         }
+        
+        // Set timer interval for efficient stepping
+        step_interval_usec = (unsigned long)step_microsec;
     }
 
 public:
@@ -74,6 +89,7 @@ public:
         else target_step = steps;
         set_pulse_width(mm_per_min);
         state = STEPPER_READY;
+        next_step_time = micros() + step_interval_usec;
         return;
     }
 
@@ -105,44 +121,72 @@ public:
         digitalWrite(ena_pin, ena_val);
     }
     bool is_stop() { return (state==STEPPER_STOP)?true:false; }
+    
+    // Emergency stop for limit switches (immediate response)
+    void emergency_stop() {
+        state = STEPPER_STOP;
+        digitalWrite(pul_pin, LOW);
+    }
 
+    // Timer-optimized loop (inspired by Marlin/grbl efficiency)
     void loop() {
-    switch (state) {
-        case STEPPER_STOP:
-            break;
-        case STEPPER_READY:
-            digitalWrite(dir_pin, (target_step < position_step)?HIGH:LOW);
-            digitalWrite(ena_pin, HIGH);
-            //即ステート推移可能にする
-            state = STEPPER_DRIVE_CHECK_SWITCH;
-            break;
-        case STEPPER_DRIVE_CHECK_SWITCH:
-            state = STEPPER_DRIVE_HIGH;
-            if (((target_step > position_step) && !get_max_swich())
-            || ((target_step < position_step) && !get_min_swich())) {
-                state = STEPPER_STOP;
-            }
-            break;
-        case STEPPER_DRIVE_HIGH:
-            digitalWrite(pul_pin, LOW);
-            //直前時間の更新
-            prev_micros = micros();
-            state = STEPPER_DRIVE_KEEP_HIGH;
-            break;
-        case STEPPER_DRIVE_KEEP_HIGH:
-            if ((micros() - prev_micros) > pulse_high_usec) state = STEPPER_DRIVE_LOW;
-            break;
-        case STEPPER_DRIVE_LOW:
-            digitalWrite(pul_pin, HIGH);
-            if (target_step > position_step) position_step++;
-            if (target_step < position_step) position_step--;
-            prev_micros = micros();
-            state = STEPPER_DRIVE_KEEP_LOW;
-            if (position_step == target_step) state = STEPPER_STOP;
-            break;
-        case STEPPER_DRIVE_KEEP_LOW:
-            if ((micros() - prev_micros) > pulse_low_usec) state = STEPPER_DRIVE_CHECK_SWITCH;
-            break;
+        unsigned long current_time = micros();
+        
+        switch (state) {
+            case STEPPER_STOP:
+                break;
+                
+            case STEPPER_READY:
+                digitalWrite(dir_pin, (target_step < position_step)?HIGH:LOW);
+                digitalWrite(ena_pin, HIGH);
+                //即ステート推移可能にする
+                state = STEPPER_DRIVE_CHECK_SWITCH;
+                break;
+                
+            case STEPPER_DRIVE_CHECK_SWITCH:
+                // Immediate limit switch check for safety
+                if (((target_step > position_step) && !get_max_swich())
+                || ((target_step < position_step) && !get_min_swich())) {
+                    emergency_stop();
+                    break;
+                }
+                
+                // Check if it's time for next step (timer-based)
+                if (current_time >= next_step_time) {
+                    state = STEPPER_DRIVE_HIGH;
+                }
+                break;
+                
+            case STEPPER_DRIVE_HIGH:
+                digitalWrite(pul_pin, LOW);
+                prev_micros = current_time;
+                state = STEPPER_DRIVE_KEEP_HIGH;
+                break;
+                
+            case STEPPER_DRIVE_KEEP_HIGH:
+                if ((current_time - prev_micros) > pulse_high_usec) {
+                    state = STEPPER_DRIVE_LOW;
+                }
+                break;
+                
+            case STEPPER_DRIVE_LOW:
+                digitalWrite(pul_pin, HIGH);
+                if (target_step > position_step) position_step++;
+                if (target_step < position_step) position_step--;
+                prev_micros = current_time;
+                state = STEPPER_DRIVE_KEEP_LOW;
+                if (position_step == target_step) {
+                    state = STEPPER_STOP;
+                }
+                break;
+                
+            case STEPPER_DRIVE_KEEP_LOW:
+                if ((current_time - prev_micros) > pulse_low_usec) {
+                    // Schedule next step
+                    next_step_time = current_time + step_interval_usec;
+                    state = STEPPER_DRIVE_CHECK_SWITCH;
+                }
+                break;
         }
     }
 };

@@ -14,6 +14,16 @@ class AsyncSerial : public Print {
 
     public:
         AsyncSerial(int num) {
+#ifdef STM32F411xx
+            // STM32F411 serial port mapping
+            switch(num) {
+                case 0:serial = &Serial;break;  // USART2 (PA2/PA3)
+                case 1:serial = &Serial1;break; // USART1 (PA9/PA10)
+                case 2:serial = &Serial2;break; // USART6 (PC6/PC7)
+                default: serial = &Serial;break;
+            }
+#else
+            // AVR serial port mapping
             switch(num) {
                 case 0:serial = &Serial;break;
 #if defined(__AVR_ATmega2560__)
@@ -23,6 +33,7 @@ class AsyncSerial : public Print {
 #endif
                 default: serial = &Serial;break;
             }
+#endif
         }
 
         // override function

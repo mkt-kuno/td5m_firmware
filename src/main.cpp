@@ -1,7 +1,14 @@
 #include <Arduino.h>
-#include <MsTimer2.h>
 #include <GCodeParser.h>
 #include <EEPROMWearLevel.h>
+
+#ifdef STM32F411xx
+    // STM32-specific includes
+    #include "HardwareTimer.hpp"
+#else
+    // AVR-specific includes
+    #include <MsTimer2.h>
+#endif
 
 #include "AsyncStepper.hpp"
 #include "AsyncSerial.hpp"
@@ -15,17 +22,33 @@
 /**
  * @brief 非同期ステッピングモータドライバ
  * pulse, dir, ena, max, min
+ * Arduino Mega2560 pin assignments:
  * モーターI pulse:29, dir:30, ena:31, max:32, min33
  * モーターJ pulse:34, dir:35, ena:36, max:37, min38
  * モーターK pulse:39, dir:40, ena:41, max:42, min43
  * モーターL pulse:44, dir:45, ena:46, max:47, min48
  * モーターM pulse:49, dir:50, ena:51, max:52, min53
+ * 
+ * STM32F411 pin assignments (adjust as needed):
+ * モーターI pulse:PA0, dir:PA1, ena:PA2, max:PA3, min:PA4
+ * モーターJ pulse:PA5, dir:PA6, ena:PA7, max:PB0, min:PB1
+ * モーターK pulse:PB10, dir:PB11, ena:PB12, max:PB13, min:PB14
+ * モーターL pulse:PB15, dir:PC6, ena:PC7, max:PC8, min:PC9
+ * モーターM pulse:PC10, dir:PC11, ena:PC12, max:PD2, min:PA8
  */
+#ifdef STM32F411xx
+AsyncStepper MotorI(PA0,PA1,PA2,PA3,PA4);
+AsyncStepper MotorJ(PA5,PA6,PA7,PB0,PB1);
+AsyncStepper MotorK(PB10,PB11,PB12,PB13,PB14);
+AsyncStepper MotorL(PB15,PC6,PC7,PC8,PC9);
+AsyncStepper MotorM(PC10,PC11,PC12,PD2,PA8);
+#else
 AsyncStepper MotorI(29,30,31,32,33);
 AsyncStepper MotorJ(34,35,36,37,38);
 AsyncStepper MotorK(39,40,41,42,43);
 AsyncStepper MotorL(44,45,46,47,48);
 AsyncStepper MotorM(49,50,51,52,53);
+#endif
 
 AsyncSerial ASerial(0);//0(RX), 1(TX)
 //AsyncSerial Serial(1);//19(RX), 18(TX)	
@@ -72,8 +95,13 @@ void report(bool forced=false);
 void motor_loop(void);
 
 void setup() {
+#ifdef STM32F411xx
+    HardwareTimerWrapper::set(MSTIMER_MILLIS, tick);
+    HardwareTimerWrapper::start();
+#else
     MsTimer2::set(MSTIMER_MILLIS, tick);
     MsTimer2::start();
+#endif
     ASerial.begin(115200);
     ATimer.init();
     ATimer.next_millisec(AUTO_REPORT_MSEC);
