@@ -22,3 +22,32 @@ XYZ系統ではなく I/J/K/L/M [mm]をモータ指定&変位量としていま�
 ### G17 モータ電源OFF
 ステッピングモータの電源をONにして  
 電磁ロックを切ります  
+
+
+|Arduino|HW Pin|Motor|Function|
+|----|----|----|----|
+|29|PA7|I|Step|
+|30|PC7|I|Dir|
+|31|PC6|I|Ena|
+|32|PC5|I|Max|
+|33|PC4|I|Min|
+|34|PC3|J|Step|
+|35|PC2|J|Dir|
+|36|PC1|J|Ena|
+|37|PC0|J|Max|
+|38|PD7|J|Min|
+|39|PG2|K|Step|
+|40|PG1|K|Dir|
+|41|PG0|K|Ena|
+|42|PL7|K|Max|
+|43|PL6|K|Min|
+|44|PL5|L|Step|
+|45|PL4|L|Dir|
+|46|PL3|L|Ena|
+|47|PL2|L|Max|
+|48|PL1|L|Min|
+|49|PL0|M|Step|
+|50|PB3|M|Dir|
+|51|PB2|M|Ena|
+|52|PB1|M|Max|
+|53|PB0|M|Min|
