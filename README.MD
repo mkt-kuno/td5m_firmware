@@ -62,3 +62,19 @@ SW黒-白: Max Limit
 |51|PB2|M|Ena|
 |52|PB1|M|Max|
 |53|PB0|M|Min|
+
+## GRBL的設定項目(only X axis)
+```gcode
+$3=1 ;Step Dir X Invert
+$5=1 ;Limit Logic X Invert
+$21=1 ;Hard Limit X Enable
+$22=1 ;Home X Enable
+$23=1 ;Home X Dir Invert
+$24=10;Homing Speed [mm/min]
+$25=20;Homing Search Speed [mm/min]
+$27=0.5;After Home, Set Back Little Bit [mm]
+$100=2400;X [mm/step]
+$110=30; X Max Speed[mm/min]
+$120=1; X Acce [mm/s^2]
+$130=50; X Max Position [mm]
+```
