@@ -24,15 +24,15 @@ XYZ系統ではなく I/J/K/L/M [mm]をモータ指定&変位量としていま�
 電磁ロックを切ります  
 
 ## モーター情報
-2400 [steps/mm]
+2400 [steps/mm]  
 
-SM黒:A1/A+
-SM緑:A2/A-
-SM赤:B1/B+
-SM青:B2/B-
+SM黒:A1/A+  
+SM緑:A2/A-  
+SM赤:B1/B+  
+SM青:B2/B-  
 
-SW赤-青: Min Limit
-SW黒-白: Max Limit`
+SW赤-青: Min Limit  
+SW黒-白: Max Limit  
 
 ## ピン情報
 |Arduino|HW Pin|Motor|Function|
