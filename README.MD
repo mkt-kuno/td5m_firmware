@@ -33,15 +33,15 @@ Range: 50[mm]
 LoadingTime: 10%の動作90%の冷却,2分動作で18分休憩  
 SPM: 2400 [steps/mm]  
 
-| 空载速度 (No-load speed) | 负载速度 (Load speed) | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
+| No-load speed | Load speed | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
 | :--- | :--- | :--- | :--- | :--- |
-| 0.5mm/s | 0.3mm/s | 900N | 800N | 2000N |
+| 0.5mm/s (30mm/s)| 0.3mm/s | 900N | 800N | 2000N |
 | 1mm/s | 0.8mm/s | 750N | 600N | 1000N |
 | 1.5mm/s | 1.2mm/s | 600N | 550N | 700N |
-| 2mm/s | 1.6mm/s | 450N | 400N | 500N |
+| 2mm/s (120mm/s)| 1.6mm/s | 450N | 400N | 500N |
 | 2.5mm/s | 2mm/s | 350N | 300N | 400N |
 | 3mm/s | 2.5mm/s | 300N | 250N | 400N |
-| 4mm/s | 3.5mm/s | 200N | 150N | 300N |
+| 4mm/s (240mm/s)| 3.5mm/s | 200N | 150N | 300N |
 
 SM黒:A1/A+  
 SM緑:A2/A-  
@@ -87,11 +87,11 @@ $5=1 ;Limit Logic X Invert
 $21=1 ;Hard Limit X Enable
 $22=1 ;Home X Enable
 $23=1 ;Home X Dir Invert
-$24=10;Homing Speed [mm/min]
-$25=20;Homing Search Speed [mm/min]
+$24=30;Homing Speed [mm/min]
+$25=120;Homing Search Speed [mm/min]
 $27=0.5;After Home, Set Back Little Bit [mm]
 $100=2400;X [mm/step]
-$110=30; X Max Speed[mm/min]
-$120=1; X Acce [mm/s^2]
+$110=240; X Max Speed[mm/min]
+$120=2; X Acce [mm/s^2]
 $130=50; X Max Position [mm]
 ```
