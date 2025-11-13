@@ -24,7 +24,24 @@ XYZ系統ではなく I/J/K/L/M [mm]をモータ指定&変位量としていま�
 電磁ロックを切ります  
 
 ## モーター情報
-2400 [steps/mm]  
+Model:BHTGA-SS-50-0.5  
+DC Range: 24[V]
+Current(no load):　0.3[A]
+Current(loading):　2.0[A]
+MaxLoad: 90[kg]
+Range: 50[mm]
+LoadingTime: 10%の動作90%の冷却,2分動作で18分休憩
+SPM: 2400 [steps/mm]  
+
+| 空载速度 (No-load speed) | 负载速度 (Load speed) | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
+| :--- | :--- | :--- | :--- | :--- |
+| 0.5mm/s | 0.3mm/s | 900N | 800N | 2000N |
+| 1mm/s | 0.8mm/s | 750N | 600N | 1000N |
+| 1.5mm/s | 1.2mm/s | 600N | 550N | 700N |
+| 2mm/s | 1.6mm/s | 450N | 400N | 500N |
+| 2.5mm/s | 2mm/s | 350N | 300N | 400N |
+| 3mm/s | 2.5mm/s | 300N | 250N | 400N |
+| 4mm/s | 3.5mm/s | 200N | 150N | 300N |
 
 SM黒:A1/A+  
 SM緑:A2/A-  
