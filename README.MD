@@ -25,12 +25,12 @@ XYZ系統ではなく I/J/K/L/M [mm]をモータ指定&変位量としていま�
 
 ## モーター情報
 Model:BHTGA-SS-50-0.5  
-DC Range: 24[V]
-Current(no load):　0.3[A]
-Current(loading):　2.0[A]
-MaxLoad: 90[kg]
-Range: 50[mm]
-LoadingTime: 10%の動作90%の冷却,2分動作で18分休憩
+DC Range: 24[V]  
+Current(no load):　0.3[A]  
+Current(loading):　2.0[A]  
+MaxLoad: 90[kg]  
+Range: 50[mm]  
+LoadingTime: 10%の動作90%の冷却,2分動作で18分休憩  
 SPM: 2400 [steps/mm]  
 
 | 空载速度 (No-load speed) | 负载速度 (Load speed) | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
