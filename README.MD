@@ -1,27 +1,30 @@
-# 5モータ同時ドライブファームウェア
+# 5モータ同時ドライブgrblファームウェア
 対象試験:落とし戸試験  
-ボード:Mega2560(EEPROMを必要とするため)  
-## API(GCode)
-### 共通事項
-XYZ系統ではなく I/J/K/L/M [mm]をモータ指定&変位量としています  
-また速度指定を V/W/X/Y/Z [mm/min]としています。  
-モータI[mm] -> 速度V [mm/min]  
-モータM[mm] -> 速度Z [mm/min]  
-例) G90 I-5 V10 -> モータIを絶対座標-5[mm]まで速度10[mm/min]で移動せよ  
-例) G91 I-1 V5 -> モータIを現在座標から-1[mm]、速度5[mm/min]で移動せよ  
-### G90 絶対値移動
-通常のGCodeに準拠します  
-### G91 インクリメンタル移動
-通常のGCodeに準拠します  
-### G52 ワーク位置更新
-設定値を現在のワーク位置としてEEPROMに保存します  
-### G17 モータ電源ON
-ステッピングモータの電源をONにして  
-電磁ロックを作動させます  
-よほどの重荷重がかからない限り不要だと思います  
-### G17 モータ電源OFF
-ステッピングモータの電源をONにして  
-電磁ロックを切ります  
+ボード:STM32F103C8T6 (BluePill)
+モータ:5軸,各軸BHTGA-SS-50-0.5 (リニアアクチュエータ)
+ドライバ:TB6600 x5
+
+## grblファームウェア情報
+uCNC v1.13.0(Grbl 1.13)  
+https://github.com/Paciente8159/uCNC
+
+### grblよく使うコマンド早見表
+- G0: 早送り移動
+- G1: 指定速度で移動
+- G20: インチ単位指定
+- G21: ミリ単位指定
+- G90: 絶対位置指定
+- G91: 相対位置指定
+- $HX: X軸ホーム
+- $HY: Y軸ホーム
+- $HZ: Z軸ホーム
+- $HA: A軸ホーム
+- $HB: B軸ホーム
+- \$\$: 設定一覧表示
+- \$SS: 設定値保存
+- \$SL: 設定値読み込み  
+
+他のコマンドは[公式ドキュメント](https://github.com/Paciente8159/uCNC/wiki/)を参照してください。
 
 ## モーター情報
 Model:BHTGA-SS-50-0.5  
@@ -30,8 +33,8 @@ Current(no load):　0.3[A]
 Current(loading):　2.0[A]  
 MaxLoad: 90[kg]  
 Range: 50[mm]  
-LoadingTime: 10%の動作90%の冷却,2分動作で18分休憩  
-SPM: 2400 [steps/mm]  
+LoadingTime: 10%の動作->90%の冷却,2分動作->18分休憩  
+SPM: 2400 [step/mm]  
 
 | No-load speed | Load speed | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
 | :--- | :--- | :--- | :--- | :--- |
@@ -51,47 +54,79 @@ SM青:B2/B-
 SW赤-青: Min Limit  
 SW黒-白: Max Limit  
 
-## ピン情報
-|Arduino|HW Pin|Motor|Function|
-|----|----|----|----|
-|29|PA7|I|Step|
-|30|PC7|I|Dir|
-|31|PC6|I|Ena|
-|32|PC5|I|Max|
-|33|PC4|I|Min|
-|34|PC3|J|Step|
-|35|PC2|J|Dir|
-|36|PC1|J|Ena|
-|37|PC0|J|Max|
-|38|PD7|J|Min|
-|39|PG2|K|Step|
-|40|PG1|K|Dir|
-|41|PG0|K|Ena|
-|42|PL7|K|Max|
-|43|PL6|K|Min|
-|44|PL5|L|Step|
-|45|PL4|L|Dir|
-|46|PL3|L|Ena|
-|47|PL2|L|Max|
-|48|PL1|L|Min|
-|49|PL0|M|Step|
-|50|PB3|M|Dir|
-|51|PB2|M|Ena|
-|52|PB1|M|Max|
-|53|PB0|M|Min|
+## ピン情報 for BluePill (STM32F103C8T6)
+|HW Port|HW Pin| Function|
+|---|---|---|
+|B|14|X-STEP|
+|B|13|X-DIR|
+|B|12|X-EN|
+|A|10|Y-STEP|
+|A| 9|Y-DIR|
+|A| 8|Y-EN|
+|B| 5|Z-STEP|
+|B| 4|Z-DIR|
+|B| 3|Z-EN|
+|B| 9|A-STEP|
+|B| 8|A-DIR|
+|B| 7|A-EN|
+|A| 3|B-STEP|
+|A| 2|B-DIR|
+|A| 1|B-EN|
+|B|15|X-LIM|
+|A|15|Y-LIM|
+|B| 6|Z-LIM|
+|A| 4|A-LIM|
+|A| 0|B-LIM|
+|A| 5|ESTOP|
 
-## GRBL的設定項目(only X axis)
+## モータドライバ情報
+TB6600 MicroStep: 1/16(OFF,OFF,ON)
+TB6600 Current: 2.0A-2.2A(ON,OFF,OFF)
+
+## 設定項目
 ```gcode
-$3=1 ;Step Dir X Invert
-$5=1 ;Limit Logic X Invert
-$21=1 ;Hard Limit X Enable
-$22=1 ;Home X Enable
-$23=1 ;Home X Dir Invert
-$24=30;Homing Speed [mm/min]
-$25=120;Homing Search Speed [mm/min]
-$27=0.5;After Home, Set Back Little Bit [mm]
-$100=2400;X [mm/step]
-$110=240; X Max Speed[mm/min]
-$120=2; X Acce [mm/s^2]
+; $$ ;View All Settings
+; Mask: X(1,0b00001)Y(2,0b00010)Z(4,0b00100)A(8,0b01000)B(16,0b10000)
+$0=10 ;Step Pulse Time [microsec]
+$1=60000 ;Step Idle Delay [msec]
+$2=0 ;Step Dir Invert Mask
+$3=31; Step Dir Invert Mask
+$4=0 ;Step Enable Invert
+$5=31; Limit Logic Invert Mask
+$6=0 ;Probe Logic Invert
+$10=1 ;Status Report Options
+$11=0.020 ;Junction Deviation [mm]
+$12=0.002 ;Arc Tolerance [mm]
+$13=0 ;Report in Inches
+$20=0 ;Soft Limits Enable
+$21=31; Hard Limits Enable Mask
+$22=31; Homing Enable Mask
+$23=31; Homing Dir Invert Mask
+$24=20; Homing Speed [mm/min]
+$25=40; Homing Search Speed [mm/min]
+$26=250 ;Homing Debounce [msec]
+$27=0.5; After Home, Set Back Little Bit [mm]
+$30=1000 ;Max Spindle Speed [RPM]   (NOT USE)
+$31=0 ;Min Spindle Speed [RPM]      (NOT USE)
+$32=0 ;Laser Mode Enable            (NOT USE)
+$100=38400; X [step/mm], 2400[step/mm] * 16microstep
+$101=38400; Y [step/mm], 2400[step/mm] * 16microstep
+$102=38400; Z [step/mm], 2400[step/mm] * 16microstep
+$103=38400; A [step/mm], 2400[step/mm] * 16microstep
+$104=38400; B [step/mm], 2400[step/mm] * 16microstep
+$110=80; X Max Speed[mm/min]
+$111=80; Y Max Speed[mm/min]
+$112=80; Z Max Speed[mm/min]
+$113=80; A Max Speed[mm/min]
+$114=80; B Max Speed[mm/min]
+$120=1; X Accel [mm/s^2]
+$121=1; Y Accel [mm/s^2]
+$122=1; Z Accel [mm/s^2]
+$123=1; A Accel [mm/s^2]
+$124=1; B Accel [mm/s^2]
 $130=50; X Max Position [mm]
+$131=50; Y Max Position [mm]
+$132=50; Z Max Position [mm]
+$133=50; A Max Position [mm]
+$134=50; B Max Position [mm]
 ```
