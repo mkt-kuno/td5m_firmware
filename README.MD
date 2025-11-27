@@ -24,7 +24,10 @@ https://github.com/Paciente8159/uCNC
 - \$SS: 設定値保存
 - \$SL: 設定値読み込み  
 
-他のコマンドは[公式ドキュメント](https://github.com/Paciente8159/uCNC/wiki/)を参照してください。
+他のコマンドはuCNCの [Github](https://github.com/Paciente8159/uCNC/wiki/) もしくは  
+GRBLの [Github](https://github.com/grbl/grbl)を参照してください。  
+Gコードは機械加工でとても一般的な通信仕様です。他にもネットで調べればGコードについての情報がたくさんあります。ググって調べて、多少理解してから利用してください。  
+（テレビ番組の予約ルールもGコードと読んでいますので、間違えないように）  
 
 ## モーター情報
 Model:BHTGA-SS-50-0.5  
