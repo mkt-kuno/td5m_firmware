@@ -72,9 +72,9 @@ SW黒-白: Max Limit
 |B| 9|A-STEP|
 |B| 8|A-DIR|
 |B| 7|A-EN|
-|A| 3|B-STEP|
+|A| 1|B-STEP|
 |A| 2|B-DIR|
-|A| 1|B-EN|
+|A| 3|B-EN|
 |B|15|X-LIM|
 |A|15|Y-LIM|
 |B| 6|Z-LIM|
