@@ -41,13 +41,13 @@ SPM: 2400 [step/mm]
 
 | No-load speed | Load speed | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
 | :--- | :--- | :--- | :--- | :--- |
-| 0.5mm/s (30mm/s)| 0.3mm/s | 900N | 800N | 2000N |
+| 0.5mm/s (30mm/min)| 0.3mm/s | 900N | 800N | 2000N |
 | 1mm/s | 0.8mm/s | 750N | 600N | 1000N |
 | 1.5mm/s | 1.2mm/s | 600N | 550N | 700N |
-| 2mm/s (120mm/s)| 1.6mm/s | 450N | 400N | 500N |
+| 2mm/s (120mm/min)| 1.6mm/s | 450N | 400N | 500N |
 | 2.5mm/s | 2mm/s | 350N | 300N | 400N |
 | 3mm/s | 2.5mm/s | 300N | 250N | 400N |
-| 4mm/s (240mm/s)| 3.5mm/s | 200N | 150N | 300N |
+| 4mm/s (240mm/min)| 3.5mm/s | 200N | 150N | 300N |
 
 SM黒:A1/A+  
 SM緑:A2/A-  
