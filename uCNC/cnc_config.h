@@ -135,25 +135,31 @@ extern "C"
 	 * define different settings for each axis.
 	 */
 
-	// #define DEFAULT_DIR_INV_MASK 0
-	// #define DEFAULT_LIMIT_INV_MASK 0
-	// #define DEFAULT_SOFT_LIMITS_ENABLED 0
-	// #define DEFAULT_HARD_LIMITS_ENABLED 0
-	// #define DEFAULT_HOMING_ENABLED 0
-	// #define DEFAULT_HOMING_DIR_INV_MASK 0
-	// #define DEFAULT_HOMING_FAST 50
-	// #define DEFAULT_HOMING_SLOW 10
-	// #define DEFAULT_HOMING_OFFSET 2
-	// #define DEFAULT_STEP_PER_MM 200
-	// #define DEFAULT_STEP_PER_MM_PER_AXIS {200, 200, 200}
-	// #define DEFAULT_MAX_FEED 500
-	// #define DEFAULT_MAX_FEED_PER_AXIS {500, 500, 500}
-	// #define DEFAULT_ACCEL 10
-	// #define DEFAULT_ACCEL_PER_AXIS {10, 10, 10}
-	// #define DEFAULT_MAX_DIST 200
-	// #define DEFAULT_MAX_DIST_PER_AXIS {200, 200, 50}
-	// #define DEFAULT_ARC_TOLERANCE 0.002
-	// #define DEFAULT_DEBOUNCE_MS 250
+	// Defaults below match the settings documented in README.MD ($-numbers in comments).
+	// All 5 axes share the same value, so the scalar macros are used (they expand to every
+	// axis via AXIS_COUNT). Do NOT also define the matching *_PER_AXIS macro (compile error).
+	#define DEFAULT_STEP_INV_MASK 0			// $2  Step port invert mask
+	#define DEFAULT_DIR_INV_MASK 31			// $3  Dir port invert mask (all axes)
+	#define DEFAULT_STEP_ENA_INV 0			// $4  Step enable invert
+	#define DEFAULT_LIMIT_INV_MASK 31		// $5  Limit logic invert mask (all axes)
+	#define DEFAULT_PROBE_INV_MASK 0		// $6  Probe logic invert
+	#define DEFAULT_SOFT_LIMITS_ENABLED 0	// $20 Soft limits enable
+	#define DEFAULT_HARD_LIMITS_ENABLED 1	// $21 Hard limits enable
+	#define DEFAULT_HOMING_ENABLED 1		// $22 Homing enable
+	#define DEFAULT_HOMING_DIR_INV_MASK 31	// $23 Homing dir invert mask
+	#define DEFAULT_HOMING_FAST 20			// $25 Homing search speed [mm/min]
+	#define DEFAULT_HOMING_SLOW 10			// $24 Homing feed speed [mm/min]
+	#define DEFAULT_HOMING_OFFSET 1			// $27 Homing pull-off distance [mm]
+	#define DEFAULT_STEP_PER_MM 38400		// $100-104 [step/mm] = 2400 step/mm * 16 microstep
+	// #define DEFAULT_STEP_PER_MM_PER_AXIS {38400, 38400, 38400}
+	#define DEFAULT_MAX_FEED 40				// $110-114 max speed [mm/min]
+	// #define DEFAULT_MAX_FEED_PER_AXIS {40, 40, 40}
+	#define DEFAULT_ACCEL 1					// $120-124 acceleration [mm/s^2]
+	// #define DEFAULT_ACCEL_PER_AXIS {1, 1, 1}
+	#define DEFAULT_MAX_DIST 50				// $130-134 max position [mm]
+	// #define DEFAULT_MAX_DIST_PER_AXIS {50, 50, 50}
+	#define DEFAULT_ARC_TOLERANCE 0.002		// $12 arc tolerance [mm]
+	#define DEFAULT_DEBOUNCE_MS 250			// $26 homing debounce [msec]
 
 #if defined(KINEMATIC_LINEAR_DELTA)
 	// #define DEFAULT_LIN_DELTA_ARM_LENGTH 230
