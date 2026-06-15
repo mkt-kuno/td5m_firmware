@@ -44,7 +44,7 @@ extern "C"
 		uint8_t reg;
 		struct
 		{
-			uint8_t feed_override : 1;
+			uint8_t ovr_bypass : 1;
 			uint8_t optimal : 1;
 			uint8_t synched : 1;
 #if TOOL_COUNT > 0
@@ -93,6 +93,7 @@ extern "C"
 #endif
 
 	void mc_init(void);
+	void mc_clear(bool preserve_tool);
 	bool mc_get_checkmode(void);
 	bool mc_toogle_checkmode(void);
 
@@ -108,6 +109,8 @@ extern "C"
 	uint8_t mc_update_tools(motion_data_t *block_data);
 
 	// mixed/special motions
+	bool mc_home_motion_pulloff(uint8_t axis_mask, bool fast_mode);
+	bool mc_home_motion(uint8_t axis_mask, bool is_origin_search, bool fast_mode);
 	uint8_t mc_home_axis(uint8_t axis_mask, uint8_t axis_limit);
 #ifndef DISABLE_PROBING_SUPPORT
 	uint8_t mc_probe(float *target, uint8_t flags, motion_data_t *block_data);

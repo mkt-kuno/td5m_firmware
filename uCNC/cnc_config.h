@@ -114,7 +114,7 @@ extern "C"
 	 * Disabling settings safety will make the settins run in legacy more where they are simply reset to default on error without forcing the user to re-check them
 	 */
 
-	//	 #define DISABLE_SAFE_SETTINGS
+	//  #define DISABLE_SAFE_SETTINGS
 
 	/**
 	 * Uncomment to enable G92 storing on non volatile memory
@@ -128,7 +128,7 @@ extern "C"
 	 * This is useful if you don't have EEPROM/FLASH storage or the divide read/write maximum cycle count is low to prevent damage
 	 * This is also usefull if the sender provides all settings at startup/connection
 	 * */
-		//  #define RAM_ONLY_SETTINGS
+	//  #define RAM_ONLY_SETTINGS
 
 	/**
 	 * Override default configuration settings. Use _PER_AXIS parameters to
@@ -211,9 +211,31 @@ extern "C"
 #define DELAY_ON_SPINDLE_SPEED_CHANGE 1
 // define coolant delay at restart
 #define DELAY_ON_RESUME_COOLANT 1
-// uncomment to make M7 act as M8
-// #define M7_SAME_AS_M8
+	// uncomment to make M7 act as M8
+	// #define M7_SAME_AS_M8
+
+#if TOOL_COUNT > 1
+/**
+ * Enable this option to active the Automatic Tool Changer hooks
+ * This provides access to 2 hook (for tool unmounting and tool mounting), that allows the creating/of custom modules to be used with an ATC tool
+ * These hooks will only fire if a valid tool is selected.
+ */
+// #define ENABLE_ATC_HOOKS
+#ifdef ENABLE_ATC_HOOKS
+// if an error occurs while executing some ATC gcode file put the machine in alarm mode and stop execution
+#define ALARM_ON_ATC_ERROR
 #endif
+
+#endif
+
+#endif
+
+/**
+ *
+ * Uncomment to enable pwm laser tool features
+ *
+ * **/
+#define ENABLE_LASER_PWM
 
 /**
  * Uncomment to enable laser PPI feature
@@ -234,10 +256,17 @@ extern "C"
 
 /**
  *
- * Enables Plasma THC capabilities
+ * Uncomment to enable plasma THC features
  *
  * **/
 //  #define ENABLE_PLASMA_THC
+
+/**
+ *
+ * Uncomment to enable embroidery features
+ *
+ */
+//  #define ENABLE_EMBROIDERY
 
 /**
  * Feed overrides increments and percentage ranges
@@ -292,7 +321,7 @@ extern "C"
 	 * processes comment as defined in the RS274NGC
 	 * */
 
-// #define PROCESS_COMMENTS
+	// #define PROCESS_COMMENTS
 
 	/**
 	 * Enables RS274NGC canned cycles
@@ -324,15 +353,15 @@ extern "C"
 #define ENABLE_O_CODES_VERBOSE
 #endif
 
-/**
- * Uncomment to prevent machine lock after end program (M2 or M30)
- */
-// #define DISABLE_ENDPROGRAM_LOCK
+	/**
+	 * Uncomment to prevent machine lock after end program (M2 or M30)
+	 */
+	// #define DISABLE_ENDPROGRAM_LOCK
 
-/**
- * Allow multiline startup blocks. Multiline startup blocks allow to add a multiple GCode command blocks using the | char as a separator
- */
-//  #define ENABLE_MULTILINE_STARTUP_BLOCKS
+	/**
+	 * Allow multiline startup blocks. Multiline startup blocks allow to add a multiple GCode command blocks using the | char as a separator
+	 */
+	//  #define ENABLE_MULTILINE_STARTUP_BLOCKS
 
 	/**
 	 * Shrink µCNC
@@ -351,9 +380,9 @@ extern "C"
 	// #define DISABLE_PATH_MODES
 
 	/**
-	 * enable step counting on sync motion command (needed for some Gcode extensions like G33)
+	 * Enable hooks that run on the step generation ISR and allow to modify the steps mask and direction in realtime (needed for some Gcode extensions like G33)
 	 * */
-	// #define ENABLE_RT_SYNC_MOTIONS
+	//  #define ENABLE_RT_SYNC_MOTIONS
 
 	/**
 	 * enable motion control and planner highjacking
@@ -369,13 +398,14 @@ extern "C"
 	// #define ENABLE_IO_MODULES
 	// #define ENABLE_PARSER_MODULES
 	// #define ENABLE_MOTION_CONTROL_MODULES
+	// #define ENABLE_PLANNER_MODULES
 
 	/**
 	 * Settings extensions are enabled by default
 	 * Uncomment to disable this extension.
 	 * Some option might override this (like ENABLE_TOOL_PID_CONTROLLER)
 	 * */
-// #define DISABLE_SETTINGS_MODULES
+	// #define DISABLE_SETTINGS_MODULES
 
 	/**
 	 * Allow to set continuous settings as an array
@@ -411,11 +441,23 @@ extern "C"
  * Enabling this option changes the default, short homing cycle:
  *   Rapid approach -> Slow pull off
  * into a longer and potentially more precise:
- *   Rapid approach -> Rapid pull off -> Slow approach -> Slow pull off
+ *   Rapid limit find -> Rapid limit clear -> Slow 2nd limit find -> Slow limit clear
+ *
+ * After this the pulloff offset distance is travelled for all axis
+ *
  * This change makes the code size a bit bigger but might make your
  * homing cycle yield more accurate results.
  * */
-// #define ENABLE_LONG_HOMING_CYCLE
+//  #define ENABLE_LONG_HOMING_CYCLE
+
+/**
+ * This modifies the behavior to match Grbl homing motion. Note this will force ENABLE_LONG_HOMING_CYCLE
+ *  Rapid limit find -> Rapid pull off -> Slow 2nd limit find -> Rapid pull off
+ *
+ *  No final pulloff offset is performed in this mode as the pulloff is performed per axis and on contact
+ *
+ */
+//  #define ENABLE_GRBL_STYLE_HOMING
 
 /**
  *
@@ -437,15 +479,22 @@ extern "C"
 
 // #define MODIFY_SOFT_LIMIT_TO_ERROR
 #ifdef MODIFY_SOFT_LIMIT_TO_ERROR
-// uncomment this to allow motion to continue
-// otherwise it will put the machine in hold until the user allows it to continue
-// #define ALLOW_MOTION_TO_CONTINUE
+// uncomment this to ignore the target and to continue if doing a jog motion
+// otherwise it will put the machine in hold (canceling the jog motion) until the user allows the code to continue to execute
+// #define IGNORE_JOG_TARGET_SOFT_LIMIT_ERROR
 #endif
+	// uncomment to allow jog motions that travels beyond software limits to be clamped and continue to execute without alarm or error
+	// #define ALLOW_SOFT_LIMIT_JOG_MOTION_CLAMPING
 
 	/**
 	 * If the type of machine supports skew and needs skew correction
 	 *  (defined in the specified kinematics_xxx.h file)
 	 * */
+
+/**
+ * Safety door configurations (in development)
+ */
+// #define ENABLE_SAFETY_DOOR_PARKING
 
 // #define ENABLE_SKEW_COMPENSATION
 #ifdef ENABLE_SKEW_COMPENSATION
@@ -498,17 +547,6 @@ extern "C"
 	 * */
 
 	// #define ENABLE_BACKLASH_COMPENSATION
-
-	/**
-	 * Uncomment these to enable step ISR calculation strategies (uses more
-	 * memory) STEP_ISR_SKIP_MAIN - carries the information about the main
-	 * stepper (performs a step in every ISR tick) and skips calculations
-	 * STEP_ISR_SKIP_IDLE - carries the information about the idle steppers
-	 * (performs 0 steps in the ISR tick) and skips calculations
-	 * */
-
-#define STEP_ISR_SKIP_MAIN
-#define STEP_ISR_SKIP_IDLE
 
 	/**
 	 * Sets the maximum number of step doubling loops carried by the DSS (Dynamic
@@ -566,20 +604,13 @@ extern "C"
 	// #define FORCE_SOFT_POLLING
 
 	/**
-	 * Runs a check for state change inside the RTC ISR/task. This is a failsafe
-	 * check monitor the pins in a regular interval. The value sets the frequency of this safety
-	 * check that is executed every 2^(CTRL_SCHED_CHECK) milliseconds. A
-	 * negative value will disable this feature. The maximum is 7
+	 * Uncomment to enable itp step generation to run inside the RTC ISR/task.
+	 * This ensures ITP starving prevention and runs the planner step calculation to run
+	 * periodically without being affect by any heavy code added by any modules
+	 *
+	 * From version 1.16+ this will be enabled by default
 	 * */
-
-#define CTRL_SCHED_CHECK 4
-
-	/**
-	 * EXPERIMENTAL! Uncomment to enable itp step generation to run inside the RTC ISR/task.
-	 * This ensures ITP starving prevention. Usually this will be executed at the same sample
-	 * rate as the interpolator with an upper bound of 1Khz and a lower bound of 3Hz
-	 * */
-// #define ENABLE_ITP_FEED_TASK
+#define ENABLE_ITP_FEED_TASK
 
 /**
  * Uncomment to invert Emergency stop button
@@ -623,9 +654,20 @@ extern "C"
 	 * 0 - disables
 	 * 1 - partially emulates the startup message and prints unused settings to improve compatibility
 	 * 2 - full emulation of the grbl startup and info messages (this also makes command $IE available to print the firmware information in extended format)
+	 * 3 - **New** drops ESTOP behaviour µCNC shutdown locking for a more similar Grbl behavior
 	 * */
 
-#define EMULATE_GRBL_STARTUP 1
+#define EMULATE_GRBL_STARTUP 2
+
+	/**
+	 * Enable advanced Grbl states.
+	 * This enables a couple more states in the status messages besides Alarm, Door, Hold, Check, Home, Jog, Run and Idle. These are:
+	 * Locked - when the controller in in lock state (requires $X or $H to unlock)
+	 * Dwell - when a dwell is being executed
+	 * Probe - used in probing motions and HMapping
+	 */
+
+	// #define ENABLE_EXTRA_GRBL_STATES
 
 	/**
 	 *

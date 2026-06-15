@@ -107,9 +107,10 @@ volatile rp2350_alarm_t *mcu_alarms;
 void mcu_alarm_isr(void)
 {
 	hw_clear_bits(&timer_hw->intr, (1U << ALARM_TIMER));
+	uint32_t time = 0;
 	if (mcu_alarms)
 	{
-		while (mcu_alarms->timeout < (uint32_t)timer_hw->timerawl)
+		while (time = (uint32_t)timer_hw->timerawl, MEM_BARRIER, mcu_alarms->timeout <= time)
 		{
 			rp2350_alarm_t *alarm = (rp2350_alarm_t *)mcu_alarms;
 			// advance
@@ -124,6 +125,7 @@ void mcu_alarm_isr(void)
 			// no more alarms
 			if (!mcu_alarms)
 			{
+				timer_hw->alarm[ALARM_TIMER] = 0xFFFFFFFF;
 				return;
 			}
 		}
@@ -157,7 +159,7 @@ void mcu_enqueue_alarm(rp2350_alarm_t *a, uint32_t timeout_us)
 	a->timeout = (uint32_t)target;
 	a->next = NULL;
 
-	__ATOMIC__
+	ATOMIC_CODEBLOCK
 	{
 		rp2350_alarm_t *ptr = (rp2350_alarm_t *)mcu_alarms;
 		// is the only
@@ -285,7 +287,7 @@ void mcu_rtc_isr(void)
 	ms_servo_counter = (servo_counter != 20) ? servo_counter : 0;
 
 #endif
-	mcu_rtc_cb(millis());
+	mcu_rtc_cb(mcu_millis());
 }
 
 /**
@@ -333,7 +335,7 @@ void mcu_init(void)
 	// init rtc, oneshot and servo alarms
 	mcu_alarms_init();
 	rtc_alarm.alarm_cb = &mcu_rtc_isr;
-	mcu_enqueue_alarm(&rtc_alarm, 500000UL);
+	mcu_enqueue_alarm(&rtc_alarm, 1000UL);
 
 #if SERVOS_MASK > 0
 	servo_alarm.alarm_cb = &mcu_clear_servos;
@@ -499,7 +501,7 @@ static void mcu_itp_isr(void)
 
 	if (!resetstep)
 	{
-		mcu_step_cb();
+			mcu_step_cb();
 	}
 
 	else
@@ -519,7 +521,7 @@ void mcu_freq_to_clocks(float frequency, uint16_t *ticks, uint16_t *prescaller)
 	frequency = CLAMP((float)F_STEP_MIN, frequency, (float)F_STEP_MAX);
 	// up and down counter (generates half the step rate at each event)
 	uint32_t totalticks = (uint32_t)((float)(1000000UL >> 1) / frequency);
-	*prescaller = 1;
+	*prescaller = 0;
 	while (totalticks > 0xFFFF)
 	{
 		(*prescaller) += 1;
@@ -648,7 +650,7 @@ static void mcu_oneshot_isr(void)
 {
 	if (mcu_timeout_cb)
 	{
-		mcu_timeout_cb();
+			mcu_timeout_cb();
 	}
 }
 
@@ -657,7 +659,7 @@ void mcu_config_timeout(mcu_timeout_delgate fp, uint32_t timeout)
 {
 	// mcu_timeout_cb = fp;
 	oneshot_alarm.alarm_cb = &mcu_oneshot_isr;
-	rp2350_oneshot_reload = (1000000UL / timeout);
+	rp2350_oneshot_reload = timeout;
 	mcu_timeout_cb = fp;
 }
 #endif
@@ -817,7 +819,7 @@ bool mcu_spi_bulk_transfer(const uint8_t *out, uint8_t *in, uint16_t len)
 			if (timeout < mcu_millis())
 			{
 				timeout = BULK_SPI_TIMEOUT + mcu_millis();
-				cnc_dotasks();
+				TASK_YIELD();
 			}
 		}
 
@@ -953,7 +955,7 @@ bool mcu_spi2_bulk_transfer(const uint8_t *out, uint8_t *in, uint16_t len)
 			if (timeout < mcu_millis())
 			{
 				timeout = BULK_SPI2_TIMEOUT + mcu_millis();
-				cnc_dotasks();
+				TASK_YIELD();
 			}
 		}
 

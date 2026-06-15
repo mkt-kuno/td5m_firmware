@@ -29,7 +29,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h>
-#include "../esp32common/esp32_common.h"
 
 static volatile bool esp32_global_isr_enabled;
 #ifdef IC74HC595_CUSTOM_SHIFT_IO
@@ -207,10 +206,11 @@ void mcu_init(void)
 	timer_set_alarm(ITP_TIMER_TG, ITP_TIMER_IDX, TIMER_ALARM_EN);
 	timer_isr_register(ITP_TIMER_TG, ITP_TIMER_IDX, mcu_itp_isr, NULL, ESP_INTR_FLAG_IRAM, NULL);
 	timer_enable_intr(ITP_TIMER_TG, ITP_TIMER_IDX);
-	timer_start(ITP_TIMER_TG, ITP_TIMER_IDX);
 
 #ifdef IC74HC595_CUSTOM_SHIFT_IO
 	mcu_i2s_extender_init();
+#else
+	timer_start(ITP_TIMER_TG, ITP_TIMER_IDX);
 #endif
 
 	// initialize rtc timer (currently on core 1)
@@ -303,7 +303,16 @@ void mcu_disable_global_isr(void)
 #ifndef mcu_get_global_isr
 bool mcu_get_global_isr(void)
 {
-	return esp32_global_isr_enabled;
+	if (xPortInIsrContext())
+	{
+		return false;
+	}
+
+	uint32_t mstatus;
+	asm volatile("csrr %0, mstatus" : "=r"(mstatus));
+
+	// MIE (Machine Interrupt Enable) is bit 3 of mstatus
+	return (mstatus & (1 << 3)) != 0;
 }
 #endif
 
@@ -422,6 +431,9 @@ void mcu_dotasks(void)
 
 #ifdef MCU_HAS_ONESHOT_TIMER
 
+uint32_t esp32_oneshot_counter;
+uint32_t esp32_oneshot_reload;
+
 MCU_CALLBACK void mcu_oneshot_isr(void *arg)
 {
 	timer_pause(ONESHOT_TIMER_TG, ONESHOT_TIMER_IDX);
@@ -441,7 +453,7 @@ void mcu_config_timeout(mcu_timeout_delgate fp, uint32_t timeout)
 {
 	mcu_timeout_cb = fp;
 #if defined(MCU_HAS_ONESHOT_TIMER) && defined(ENABLE_RT_SYNC_MOTIONS)
-	esp32_oneshot_reload = ((ITP_SAMPLE_RATE >> 1) / timeout);
+	esp32_oneshot_reload = (timeout / signal_timer.us_step);
 #elif defined(MCU_HAS_ONESHOT_TIMER)
 	timer_config_t config = {0};
 	config.divider = getApbFrequency() / 1000000UL; // 1us per count
@@ -476,6 +488,25 @@ MCU_CALLBACK void mcu_start_timeout()
 #endif
 }
 #endif
+
+// software generated oneshot for RT steps like laser PPI
+#if defined(MCU_HAS_ONESHOT_TIMER) && defined(ENABLE_RT_SYNC_MOTIONS)
+MCU_CALLBACK void mcu_gen_oneshot(void)
+{
+	if (esp32_oneshot_counter)
+	{
+		esp32_oneshot_counter--;
+		if (!esp32_oneshot_counter)
+		{
+			if (mcu_timeout_cb)
+			{
+				mcu_timeout_cb();
+			}
+		}
+	}
+}
+#endif
+
 #endif
 
 /*IO functions*/

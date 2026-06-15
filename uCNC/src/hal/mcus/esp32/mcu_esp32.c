@@ -29,7 +29,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h>
-#include "../esp32common/esp32_common.h"
 
 static volatile bool esp32_global_isr_enabled;
 
@@ -103,7 +102,6 @@ void mcu_rtc_task(void *arg)
 
 MCU_CALLBACK void mcu_itp_isr(void *arg)
 {
-
 #ifdef IC74HC595_CUSTOM_SHIFT_IO
 	if (I2S_MODE == ITP_STEP_MODE_REALTIME)
 #endif
@@ -212,17 +210,15 @@ void mcu_init(void)
 	// register PWM isr
 	timer_isr_register(ITP_TIMER_TG, ITP_TIMER_IDX, mcu_itp_isr, NULL, 0, NULL);
 	timer_enable_intr(ITP_TIMER_TG, ITP_TIMER_IDX);
-	timer_start(ITP_TIMER_TG, ITP_TIMER_IDX);
 
 #ifdef IC74HC595_CUSTOM_SHIFT_IO
 	mcu_i2s_extender_init();
 #else
-
+	timer_start(ITP_TIMER_TG, ITP_TIMER_IDX);
 #endif
 
 	// initialize rtc timer (currently on core 1)
 	xTaskCreatePinnedToCore(mcu_rtc_task, "rtcTask", 8192, NULL, 7, NULL, CONFIG_ARDUINO_RUNNING_CORE);
-
 	mcu_enable_global_isr();
 }
 
@@ -308,9 +304,21 @@ void mcu_disable_global_isr(void)
  * can be defined either as a function or a macro call
  * */
 #ifndef mcu_get_global_isr
+// bool mcu_get_global_isr(void)
+// {
+// 	return esp32_global_isr_enabled;
+// }
 bool mcu_get_global_isr(void)
 {
-	return esp32_global_isr_enabled;
+	if (xPortInIsrContext())
+	{
+		return false;
+	}
+
+	uint32_t ps;
+	__asm__ volatile("rsr.ps %0" : "=a"(ps));
+	// INTLEVEL is bits [3:0] of PS
+	return ((ps & 0xF) < 2);
 }
 #endif
 
@@ -429,6 +437,9 @@ void mcu_dotasks(void)
 
 #ifdef MCU_HAS_ONESHOT_TIMER
 
+uint32_t esp32_oneshot_counter;
+uint32_t esp32_oneshot_reload;
+
 MCU_CALLBACK void mcu_oneshot_isr(void *arg)
 {
 	timer_pause(ONESHOT_TIMER_TG, ONESHOT_TIMER_IDX);
@@ -448,7 +459,7 @@ void mcu_config_timeout(mcu_timeout_delgate fp, uint32_t timeout)
 {
 	mcu_timeout_cb = fp;
 #if defined(MCU_HAS_ONESHOT_TIMER) && defined(ENABLE_RT_SYNC_MOTIONS)
-	esp32_oneshot_reload = ((ITP_SAMPLE_RATE >> 1) / timeout);
+	esp32_oneshot_reload = (timeout / signal_timer.us_step);
 #elif defined(MCU_HAS_ONESHOT_TIMER)
 	timer_config_t config = {0};
 	config.divider = getApbFrequency() / 1000000UL; // 1us per count
@@ -483,6 +494,25 @@ MCU_CALLBACK void mcu_start_timeout()
 #endif
 }
 #endif
+
+// software generated oneshot for RT steps like laser PPI
+#if defined(MCU_HAS_ONESHOT_TIMER) && defined(ENABLE_RT_SYNC_MOTIONS)
+MCU_CALLBACK void mcu_gen_oneshot(void)
+{
+	if (esp32_oneshot_counter)
+	{
+		esp32_oneshot_counter--;
+		if (!esp32_oneshot_counter)
+		{
+			if (mcu_timeout_cb)
+			{
+				mcu_timeout_cb();
+			}
+		}
+	}
+}
+#endif
+
 #endif
 
 /*IO functions*/

@@ -89,31 +89,12 @@ typedef struct
 
 static i2s_hal_t i2s_hal;
 
-extern void mcu_itp_isr(void *arg);
-extern void mcu_gen_pwm(void);
-extern void mcu_gen_servo(void);
-extern void mcu_gen_step(void);
-extern void mcu_gpio_isr(void *type);
-
-// software generated oneshot for RT steps like laser PPI
-#if defined(MCU_HAS_ONESHOT_TIMER) && defined(ENABLE_RT_SYNC_MOTIONS)
-static uint32_t esp32_oneshot_counter;
-static uint32_t esp32_oneshot_reload;
-static FORCEINLINE void mcu_gen_oneshot(void)
-{
-	if (esp32_oneshot_counter)
-	{
-		esp32_oneshot_counter--;
-		if (!esp32_oneshot_counter)
-		{
-			if (mcu_timeout_cb)
-			{
-				mcu_timeout_cb();
-			}
-		}
-	}
-}
-#endif
+MCU_CALLBACK void mcu_itp_isr(void *arg);
+MCU_CALLBACK void mcu_gen_pwm(void);
+MCU_CALLBACK void mcu_gen_servo(void);
+MCU_CALLBACK void mcu_gen_step(void);
+MCU_CALLBACK void mcu_gpio_isr(void *type);
+MCU_CALLBACK void mcu_gen_oneshot(void);
 
 IRAM_ATTR void i2s_write_word(uint32_t value)
 {
@@ -170,6 +151,27 @@ static void IRAM_ATTR i2s_dma_event_handler(void *arg)
 	}
 
 	gdma_ll_tx_clear_interrupt_status(&GDMA, i2s_hal.gdma_channel, irq);
+}
+
+static void IRAM_ATTR i2s_enter_realtime_mode(void)
+{
+	I2S_REG.tx_conf.tx_stop_en = 0;
+	config.mode = I2S_MODE_MASTER | I2S_MODE_TX;
+	config.sample_rate = I2S_SAMPLE_RATE;
+	config.comm_fmt = I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB;
+	config.chan_fmt = I2S_CHANNEL_FMT_ONLY_LEFT;
+	config.sample_bits = I2S_BITS_PER_SAMPLE_32BIT;
+	config.chan_bits = I2S_BITS_PER_SAMPLE_32BIT;
+	config.active_chan = 0;
+	config.total_chan = 2;
+
+	i2s_hal_config_param(&i2s_hal.ctx, &config);
+	i2s_ll_tx_set_active_chan_mask(&I2S_REG, 0);
+	// I2S_REG.tx_timing.tx_ws_out_dm = 1;
+	I2S_REG.tx_conf.tx_chan_equal = 0;
+	I2S_REG.conf_single_data = __atomic_load_n((uint32_t *)&ic74hc595_i2s_pins, __ATOMIC_RELAXED);
+	timer_set_counter_value(ITP_TIMER_TG, ITP_TIMER_IDX, 0x00000000ULL);
+	timer_start(ITP_TIMER_TG, ITP_TIMER_IDX);
 }
 
 /**
@@ -235,23 +237,7 @@ static void i2s_enter_mode_glitch_free(uint32_t mode)
 		gdma_ll_tx_enable_interrupt(&GDMA, i2s_hal.gdma_channel, GDMA_LL_EVENT_TX_DONE | GDMA_LL_EVENT_TX_TOTAL_EOF, true);
 		break;
 	case ITP_STEP_MODE_REALTIME:
-		I2S_REG.tx_conf.tx_stop_en = 0;
-		config.mode = I2S_MODE_MASTER | I2S_MODE_TX;
-		config.sample_rate = I2S_SAMPLE_RATE;
-		config.comm_fmt = I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB;
-		config.chan_fmt = I2S_CHANNEL_FMT_ONLY_LEFT;
-		config.sample_bits = I2S_BITS_PER_SAMPLE_32BIT;
-		config.chan_bits = I2S_BITS_PER_SAMPLE_32BIT;
-		config.active_chan = 0;
-		config.total_chan = 2;
-
-		i2s_hal_config_param(&i2s_hal.ctx, &config);
-		i2s_ll_tx_set_active_chan_mask(&I2S_REG, 0);
-		// I2S_REG.tx_timing.tx_ws_out_dm = 1;
-		I2S_REG.tx_conf.tx_chan_equal = 0;
-		I2S_REG.conf_single_data = __atomic_load_n((uint32_t *)&ic74hc595_i2s_pins, __ATOMIC_RELAXED);
-		timer_set_counter_value(ITP_TIMER_TG, ITP_TIMER_IDX, 0x00000000ULL);
-		timer_start(ITP_TIMER_TG, ITP_TIMER_IDX);
+		i2s_enter_realtime_mode();
 		break;
 	}
 
@@ -276,7 +262,7 @@ uint8_t itp_set_step_mode(uint8_t mode)
 	{
 		itp_sync();
 #ifdef USE_I2S_REALTIME_MODE_ONLY
-		__atomic_store_n((uint32_t *)&i2s_mode, (ITP_STEP_MODE_SYNC | ITP_STEP_MODE_REALTIME), __ATOMIC_RELAXED);
+		__atomic_store_n((uint32_t *)&i2s_mode, (ITP_STEP_MODE_REALTIME), __ATOMIC_RELAXED);
 #else
 		__atomic_store_n((uint32_t *)&i2s_mode, (ITP_STEP_MODE_SYNC | mode), __ATOMIC_RELAXED);
 #endif
@@ -405,6 +391,7 @@ void mcu_i2s_extender_init(void)
 	itp_set_step_mode(ITP_STEP_MODE_DEFAULT);
 #else
 	itp_set_step_mode(ITP_STEP_MODE_REALTIME);
+	i2s_enter_realtime_mode();
 #endif
 }
 

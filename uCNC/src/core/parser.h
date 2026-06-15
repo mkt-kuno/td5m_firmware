@@ -105,8 +105,8 @@ extern "C"
 #define M7 MIST_MASK
 #define M8 COOLANT_MASK
 #define M9 0
-#define M48 1
-#define M49 0
+#define M48 0
+#define M49 1
 
 #define EXTENDED_GCODE_BASE 0
 #define EXTENDED_MCODE_BASE 10000
@@ -183,10 +183,12 @@ extern "C"
 #define GCODE_XYZ_AXIS (GCODE_WORD_X | GCODE_WORD_Y | GCODE_WORD_Z)
 #define GCODE_IJK_AXIS (GCODE_WORD_I | GCODE_WORD_J | GCODE_WORD_K)
 
-#define LASER_PWM_MODE 1
-#define LASER_PPI_MODE 2
-#define LASER_PPI_VARPOWER_MODE 4
+#define UNDEF_MODE 0
+#define PWM_VARPOWER_MODE 1
+#define PPI_MODE 2
+#define PPI_VARPOWER_MODE 4
 #define PLASMA_THC_MODE 8
+#define EMBROIDERY_MODE 16
 
 #ifdef ENABLE_RS274NGC_EXPRESSIONS
 #ifndef RS274NGC_MAX_USER_VARS
@@ -236,7 +238,7 @@ extern "C"
 		uint8_t units : 1;
 		uint8_t tlo_mode : 1;
 		uint8_t return_mode : 1;
-		uint8_t feed_speed_override : 1;
+		uint8_t feed_speed_ovr_bypass : 1;
 		// 2byte or 1byte
 		uint8_t stopping : 3;
 #if TOOL_COUNT == 1

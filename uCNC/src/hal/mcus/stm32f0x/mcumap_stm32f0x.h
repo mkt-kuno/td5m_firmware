@@ -63,6 +63,17 @@ extern "C"
 #define rom_memcpy memcpy
 #define rom_read_byte *
 
+// NVIC Priority levels
+#define NVIC_INPUT_IRQ_Pri 1
+#define NVIC_SPI_IRQ_Pri 3
+#define NVIC_UART_IRQ_Pri 4
+#define NVIC_ITP_IRQ_Pri 5
+#define NVIC_ONESHOT_IRQ_Pri 6
+#define NVIC_SERVO_IRQ_Pri 6
+#define NVIC_RTC_IRQ_Pri 8
+#define NVIC_I2C_IRQ_Pri 9
+#define NVIC_USB_IRQ_Pri 10
+
 	// needed by software delays
 #ifndef MCU_CYCLES_PER_LOOP
 #define MCU_CYCLES_PER_LOOP 4
@@ -3962,9 +3973,12 @@ extern "C"
 #endif
 
 #ifdef MCU_HAS_UART2
+#ifndef BAUDRATE2
+#define BAUDRATE2 BAUDRATE
+#endif
 // this MCU does not work well with both TX and RX interrupt
 // this forces the sync TX method to fix communication
-#define COM2_UART2 __usart__(UART2_PORT)
+#define COM2_UART __usart__(UART2_PORT)
 
 #if (UART2_PORT < 3)
 #define COM2_IRQ __helper__(USART, UART2_PORT, _IRQn)
@@ -3974,8 +3988,8 @@ extern "C"
 #define MCU_SERIAL_ISR USART3_8_IRQHandler
 #endif
 
-#define COM2_OUTREG (COM2_UART2)->TDR
-#define COM2_INREG (COM2_UART2)->RDR
+#define COM2_OUTREG (COM2_UART)->TDR
+#define COM2_INREG (COM2_UART)->RDR
 
 #if (UART2_PORT == 1 || UART2_PORT >= 6)
 #define COM2_APB APB2ENR
@@ -4822,7 +4836,7 @@ extern "C"
 		SETBIT(EXTI->RTSR, __indirect__(diopin, BIT));                                                            \
 		SETBIT(EXTI->FTSR, __indirect__(diopin, BIT));                                                            \
 		SETBIT(EXTI->IMR, __indirect__(diopin, BIT));                                                             \
-		NVIC_SetPriority(__indirect__(diopin, IRQ), 5);                                                           \
+		NVIC_SetPriority(__indirect__(diopin, IRQ), NVIC_INPUT_IRQ_Pri);                                                           \
 		NVIC_ClearPendingIRQ(__indirect__(diopin, IRQ));                                                          \
 		NVIC_EnableIRQ(__indirect__(diopin, IRQ));                                                                \
 	}
@@ -4882,18 +4896,10 @@ extern "C"
 #define mcu_disable_probe_isr()
 #endif
 
-	extern volatile bool stm32_global_isr_enabled;
-#define mcu_enable_global_isr()      \
-	{                                  \
-		__enable_irq();                  \
-		stm32_global_isr_enabled = true; \
-	}
-#define mcu_disable_global_isr()      \
-	{                                   \
-		stm32_global_isr_enabled = false; \
-		__disable_irq();                  \
-	}
-#define mcu_get_global_isr() stm32_global_isr_enabled
+#define mcu_enable_global_isr __enable_irq
+#define mcu_disable_global_isr __disable_irq
+#define mcu_get_global_isr() (__get_PRIMASK() == 0u)
+#define mcu_in_isr_context() (__get_IPSR() != 0)
 #define mcu_free_micros() ((uint32_t)((((SysTick->LOAD + 1) - SysTick->VAL) * 1000UL) / (SysTick->LOAD + 1)))
 
 #define GPIO_RESET 0x3U

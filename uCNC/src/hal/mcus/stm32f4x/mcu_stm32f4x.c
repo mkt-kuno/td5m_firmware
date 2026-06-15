@@ -73,7 +73,6 @@ static void FORCEINLINE mcu_eeprom_init(void);
  * Can count up to almost 50 days
  **/
 static volatile uint32_t mcu_runtime_ms;
-volatile bool stm32_global_isr_enabled;
 
 /**
  * The isr functions
@@ -88,38 +87,33 @@ DECL_BUFFER(uint8_t, uart_rx, RX_BUFFER_SIZE);
 
 void MCU_SERIAL_ISR(void)
 {
-	__ATOMIC_FORCEON__
+	if (COM_UART->SR & USART_SR_RXNE)
 	{
-		if (COM_UART->SR & USART_SR_RXNE)
-		{
-			uint8_t c = COM_INREG;
+		uint8_t c = COM_INREG;
 #if !defined(DETACH_UART_FROM_MAIN_PROTOCOL)
-			if (mcu_com_rx_cb(c))
-			{
-				if (BUFFER_FULL(uart_rx))
-				{
-					STREAM_OVF(c);
-				}
-
-				BUFFER_ENQUEUE(uart_rx, &c);
-			}
-#else
-			mcu_uart_rx_cb(c);
-#endif
-		}
-
-		if ((COM_UART->SR & USART_SR_TXE) && (COM_UART->CR1 & USART_CR1_TXEIE))
+		if (mcu_com_rx_cb(c))
 		{
-			mcu_enable_global_isr();
-			if (BUFFER_EMPTY(uart_tx))
+			if (!BUFFER_TRY_ENQUEUE(uart_rx, &c))
 			{
-				COM_UART->CR1 &= ~(USART_CR1_TXEIE);
-				return;
+				STREAM_OVF(c);
 			}
-			uint8_t c;
-			BUFFER_DEQUEUE(uart_tx, &c);
-			COM_OUTREG = c;
 		}
+#else
+		mcu_uart_rx_cb(c);
+#endif
+	}
+
+	if ((COM_UART->SR & USART_SR_TXE) && (COM_UART->CR1 & USART_CR1_TXEIE))
+	{
+		uint8_t c;
+
+		if (!BUFFER_TRY_DEQUEUE(uart_tx, &c))
+		{
+			COM_UART->CR1 &= ~(USART_CR1_TXEIE);
+			return;
+		}
+
+		COM_OUTREG = c;
 	}
 }
 #endif
@@ -133,46 +127,40 @@ DECL_BUFFER(uint8_t, uart2_rx, RX_BUFFER_SIZE);
 
 void MCU_SERIAL2_ISR(void)
 {
-	__ATOMIC_FORCEON__
+	if (COM2_UART->SR & USART_SR_RXNE)
 	{
-		if (COM2_UART->SR & USART_SR_RXNE)
-		{
-			uint8_t c = COM2_INREG;
+		uint8_t c = COM2_INREG;
 #if !defined(DETACH_UART2_FROM_MAIN_PROTOCOL)
-			if (mcu_com_rx_cb(c))
-			{
-				if (BUFFER_FULL(uart2_rx))
-				{
-					STREAM_OVF(c);
-				}
-
-				BUFFER_ENQUEUE(uart2_rx, &c);
-			}
-#else
-			mcu_uart2_rx_cb(c);
-#ifndef UART2_DISABLE_BUFFER
-			if (BUFFER_FULL(uart2_rx))
+		if (mcu_com_rx_cb(c))
+		{
+			if (!BUFFER_TRY_ENQUEUE(uart2_rx, &c))
 			{
 				STREAM_OVF(c);
 			}
-
-			BUFFER_ENQUEUE(uart2_rx, &c);
-#endif
-#endif
 		}
-
-		if ((COM2_UART->SR & USART_SR_TXE) && (COM2_UART->CR1 & USART_CR1_TXEIE))
+#else
+		mcu_uart2_rx_cb(c);
+#ifndef UART2_DISABLE_BUFFER
+		if (!BUFFER_TRY_ENQUEUE(uart2_rx, &c))
 		{
-			mcu_enable_global_isr();
-			if (BUFFER_EMPTY(uart2_tx))
-			{
-				COM2_UART->CR1 &= ~(USART_CR1_TXEIE);
-				return;
-			}
-			uint8_t c;
-			BUFFER_DEQUEUE(uart2_tx, &c);
-			COM2_OUTREG = c;
+			STREAM_OVF(c);
 		}
+
+#endif
+#endif
+	}
+
+	if ((COM2_UART->SR & USART_SR_TXE) && (COM2_UART->CR1 & USART_CR1_TXEIE))
+	{
+		uint8_t c;
+
+		if (!BUFFER_TRY_DEQUEUE(uart2_tx, &c))
+		{
+			COM2_UART->CR1 &= ~(USART_CR1_TXEIE);
+			return;
+		}
+
+		COM2_OUTREG = c;
 	}
 }
 #endif
@@ -180,11 +168,8 @@ void MCU_SERIAL2_ISR(void)
 #ifdef MCU_HAS_USB
 void OTG_FS_IRQHandler(void)
 {
-	mcu_disable_global_isr();
 	tusb_cdc_isr_handler();
 	USB_OTG_FS->GINTSTS = 0xBFFFFFFFU;
-	NVIC_ClearPendingIRQ(OTG_FS_IRQn);
-	mcu_enable_global_isr();
 }
 #endif
 
@@ -230,7 +215,7 @@ void servo_timer_init(void)
 void servo_start_timeout(uint8_t val)
 {
 	SERVO_TIMER_REG->ARR = (val << 1) + 125;
-	NVIC_SetPriority(MCU_SERVO_IRQ, 10);
+	NVIC_SetPriority(MCU_SERVO_IRQ, NVIC_SERVO_IRQ_Pri);
 	NVIC_ClearPendingIRQ(MCU_SERVO_IRQ);
 	NVIC_EnableIRQ(MCU_SERVO_IRQ);
 	SERVO_TIMER_REG->DIER |= 1;
@@ -239,7 +224,6 @@ void servo_start_timeout(uint8_t val)
 
 void MCU_SERVO_ISR(void)
 {
-	mcu_enable_global_isr();
 	if ((SERVO_TIMER_REG->SR & 1))
 	{
 		mcu_clear_servos();
@@ -253,20 +237,18 @@ void MCU_SERVO_ISR(void)
 
 void MCU_ITP_ISR(void)
 {
-	mcu_disable_global_isr();
-
 	static bool resetstep = false;
 	if ((TIMER_REG->SR & 1))
 	{
 		if (!resetstep)
+		{
 			mcu_step_cb();
+		}
 		else
 			mcu_step_reset_cb();
 		resetstep = !resetstep;
 	}
 	TIMER_REG->SR = 0;
-
-	mcu_enable_global_isr();
 }
 
 #define LIMITS_EXTIBITMASK (LIMIT_X_EXTIBITMASK | LIMIT_Y_EXTIBITMASK | LIMIT_Z_EXTIBITMASK | LIMIT_X2_EXTIBITMASK | LIMIT_Y2_EXTIBITMASK | LIMIT_Z2_EXTIBITMASK | LIMIT_A_EXTIBITMASK | LIMIT_B_EXTIBITMASK | LIMIT_C_EXTIBITMASK)
@@ -277,7 +259,6 @@ void MCU_ITP_ISR(void)
 #if (ALL_EXTIBITMASK != 0)
 static void mcu_input_isr(void)
 {
-	mcu_disable_global_isr();
 #if (LIMITS_EXTIBITMASK != 0)
 	if (EXTI->PR & LIMITS_EXTIBITMASK)
 	{
@@ -304,7 +285,6 @@ static void mcu_input_isr(void)
 #endif
 
 	EXTI->PR = ALL_EXTIBITMASK;
-	mcu_enable_global_isr();
 }
 
 #if (ALL_EXTIBITMASK & 0x0001)
@@ -351,13 +331,19 @@ void EXTI15_10_IRQHandler(void)
 #endif
 #endif
 
+void PendSV_Handler(void)
+{
+	uint32_t millis = mcu_runtime_ms;
+	mcu_rtc_cb(millis);
+	NVIC_ClearPendingIRQ(PendSV_IRQn);
+}
+
 #if !defined(ARDUINO_ARCH_STM32) || defined(CUSTOM_PRE_MAIN)
 void SysTick_IRQHandler(void)
 #else
 void osSystickHandler(void)
 #endif
 {
-	mcu_disable_global_isr();
 #if SERVOS_MASK > 0
 	static uint8_t ms_servo_counter = 0;
 	uint8_t servo_counter = ms_servo_counter;
@@ -406,11 +392,8 @@ void osSystickHandler(void)
 	ms_servo_counter = (servo_counter != 20) ? servo_counter : 0;
 
 #endif
-	uint32_t millis = mcu_runtime_ms;
-	millis++;
-	mcu_runtime_ms = millis;
-	mcu_rtc_cb(millis);
-	mcu_enable_global_isr();
+	mcu_runtime_ms++;
+	SCB->ICSR = SCB_ICSR_PENDSVSET_Msk; // signal low priority task
 }
 
 /**
@@ -533,7 +516,7 @@ void mcu_usart_init(void)
 	USB_OTG_FS->GINTSTS = 0xBFFFFFFFU;
 	USB_OTG_FS->GINTMSK |= USB_OTG_GINTMSK_OTGINT;
 
-	NVIC_SetPriority(OTG_FS_IRQn, 10);
+	NVIC_SetPriority(OTG_FS_IRQn, NVIC_USB_IRQ_Pri);
 	NVIC_ClearPendingIRQ(OTG_FS_IRQn);
 	NVIC_EnableIRQ(OTG_FS_IRQn);
 
@@ -562,7 +545,7 @@ void mcu_usart_init(void)
 	brr += (uint16_t)roundf(16.0f * baudrate);
 	COM_UART->BRR = brr;
 	COM_UART->CR1 |= USART_CR1_RXNEIE; // enable RXNEIE
-	NVIC_SetPriority(COM_IRQ, 3);
+	NVIC_SetPriority(COM_IRQ, NVIC_UART_IRQ_Pri);
 	NVIC_ClearPendingIRQ(COM_IRQ);
 	NVIC_EnableIRQ(COM_IRQ);
 	COM_UART->CR1 |= (USART_CR1_RE | USART_CR1_TE | USART_CR1_UE); // enable TE, RE and UART
@@ -586,7 +569,7 @@ void mcu_usart_init(void)
 	brr2 += (uint16_t)roundf(16.0f * baudrate2);
 	COM2_UART->BRR = brr2;
 	COM2_UART->CR1 |= USART_CR1_RXNEIE; // enable RXNEIE
-	NVIC_SetPriority(COM2_IRQ, 3);
+	NVIC_SetPriority(COM2_IRQ, NVIC_UART_IRQ_Pri);
 	NVIC_ClearPendingIRQ(COM2_IRQ);
 	NVIC_EnableIRQ(COM2_IRQ);
 	COM2_UART->CR1 |= (USART_CR1_RE | USART_CR1_TE | USART_CR1_UE); // enable TE, RE and UART
@@ -599,7 +582,7 @@ DECL_BUFFER(uint8_t, usb_rx, RX_BUFFER_SIZE);
 uint8_t mcu_usb_getc(void)
 {
 	uint8_t c = 0;
-	BUFFER_DEQUEUE(usb_rx, &c);
+	BUFFER_TRY_DEQUEUE(usb_rx, &c);
 	return c;
 }
 
@@ -640,7 +623,7 @@ void mcu_usb_flush(void)
 uint8_t mcu_uart_getc(void)
 {
 	uint8_t c = 0;
-	BUFFER_DEQUEUE(uart_rx, &c);
+	BUFFER_TRY_DEQUEUE(uart_rx, &c);
 	return c;
 }
 
@@ -656,11 +639,10 @@ void mcu_uart_clear(void)
 
 void mcu_uart_putc(uint8_t c)
 {
-	while (BUFFER_FULL(uart_tx))
+	while (!BUFFER_TRY_ENQUEUE(uart_tx, &c))
 	{
 		mcu_uart_flush();
 	}
-	BUFFER_ENQUEUE(uart_tx, &c);
 }
 
 void mcu_uart_flush(void)
@@ -681,7 +663,7 @@ void mcu_uart_flush(void)
 uint8_t mcu_uart2_getc(void)
 {
 	uint8_t c = 0;
-	BUFFER_DEQUEUE(uart2_rx, &c);
+	BUFFER_TRY_DEQUEUE(uart2_rx, &c);
 	return c;
 }
 
@@ -697,11 +679,10 @@ void mcu_uart2_clear(void)
 
 void mcu_uart2_putc(uint8_t c)
 {
-	while (BUFFER_FULL(uart2_tx))
+	while (!BUFFER_TRY_ENQUEUE(uart2_tx, &c))
 	{
 		mcu_uart2_flush();
 	}
-	BUFFER_ENQUEUE(uart2_tx, &c);
 }
 
 void mcu_uart2_flush(void)
@@ -736,17 +717,17 @@ void mcu_init(void)
 	// 	mcu_config_af(SPI_CS, SPI_CS_AFIO);
 	// #endif
 	// initialize the SPI configuration register
-	SPI_REG->CR1 = SPI_CR1_SSM		 // software slave management enabled
-								 | SPI_CR1_SSI	 // internal slave select
-								 | SPI_CR1_MSTR; // SPI master mode
-																 //    | (SPI_SPEED << 3) | SPI_MODE;
+	SPI_REG->CR1 = SPI_CR1_SSM	   // software slave management enabled
+				   | SPI_CR1_SSI   // internal slave select
+				   | SPI_CR1_MSTR; // SPI master mode
+								   //    | (SPI_SPEED << 3) | SPI_MODE;
 	spi_config_t spi_conf = {0};
 	spi_conf.mode = SPI_MODE;
 	mcu_spi_config(spi_conf, SPI_FREQ);
 
 	RCC->AHB1ENR |= SPI_DMA_EN;
 
-	NVIC_SetPriority(SPI_IRQ, 2);
+	NVIC_SetPriority(SPI_IRQ, NVIC_SPI_IRQ_Pri);
 	NVIC_ClearPendingIRQ(SPI_IRQ);
 	NVIC_EnableIRQ(SPI_IRQ);
 
@@ -761,17 +742,17 @@ void mcu_init(void)
 	// 	mcu_config_af(SPI2_CS, SPI2_CS_AFIO);
 	// #endif
 	// initialize the SPI2 configuration register
-	SPI2_REG->CR1 = SPI_CR1_SSM			// software slave management enabled
-									| SPI_CR1_SSI		// internal slave select
-									| SPI_CR1_MSTR; // SPI2 master mode
-																	//    | (SPI2_SPEED << 3) | SPI2_MODE;
+	SPI2_REG->CR1 = SPI_CR1_SSM		// software slave management enabled
+					| SPI_CR1_SSI	// internal slave select
+					| SPI_CR1_MSTR; // SPI2 master mode
+									//    | (SPI2_SPEED << 3) | SPI2_MODE;
 	spi_config_t spi2_conf = {0};
 	spi2_conf.mode = SPI2_MODE;
 	mcu_spi2_config(spi2_conf, SPI2_FREQ);
 
 	RCC->AHB1ENR |= SPI2_DMA_EN;
 
-	NVIC_SetPriority(SPI2_IRQ, 2);
+	NVIC_SetPriority(SPI2_IRQ, NVIC_SPI_IRQ_Pri);
 	NVIC_ClearPendingIRQ(SPI2_IRQ);
 	NVIC_EnableIRQ(SPI2_IRQ);
 
@@ -797,9 +778,8 @@ void mcu_init(void)
 	I2C_REG->CR1 |= I2C_CR1_PE;
 #endif
 
-	mcu_disable_probe_isr();
+	mcu_disable_global_isr();
 	stm32_flash_current_offset = 0;
-	stm32_global_isr_enabled = false;
 	mcu_eeprom_init();
 	mcu_enable_global_isr();
 }
@@ -847,7 +827,7 @@ void mcu_freq_to_clocks(float frequency, uint16_t *ticks, uint16_t *prescaller)
 	frequency = CLAMP((float)F_STEP_MIN, frequency, (float)F_STEP_MAX);
 
 	// up and down counter (generates half the step rate at each event)
-	uint32_t totalticks = (uint32_t)((float)(TIMER_CLOCK >> 1) / frequency);
+	uint32_t totalticks = (uint32_t)((float)(TIMER_CLOCK) / frequency);
 	*prescaller = 1;
 	while (totalticks > 0xFFFF)
 	{
@@ -861,7 +841,7 @@ void mcu_freq_to_clocks(float frequency, uint16_t *ticks, uint16_t *prescaller)
 
 float mcu_clocks_to_freq(uint16_t ticks, uint16_t prescaller)
 {
-	return ((float)TIMER_CLOCK / (float)(((uint32_t)ticks) << (prescaller + 1)));
+	return ((float)TIMER_CLOCK / (float)(((uint32_t)ticks) << (prescaller)));
 }
 
 // starts a constant rate pulse at a given frequency.
@@ -875,7 +855,7 @@ void mcu_start_itp_isr(uint16_t ticks, uint16_t prescaller)
 	TIMER_REG->EGR |= 0x01;
 	TIMER_REG->SR &= ~0x01;
 
-	NVIC_SetPriority(MCU_ITP_IRQ, 1);
+	NVIC_SetPriority(MCU_ITP_IRQ, NVIC_ITP_IRQ_Pri);
 	NVIC_ClearPendingIRQ(MCU_ITP_IRQ);
 	NVIC_EnableIRQ(MCU_ITP_IRQ);
 
@@ -917,8 +897,9 @@ void mcu_rtc_init()
 	SysTick->CTRL = 0;
 	SysTick->LOAD = ((F_CPU / 1000) - 1);
 	SysTick->VAL = 0;
-	NVIC_SetPriority(SysTick_IRQn, 10);
-	SysTick->CTRL = 7; // Start SysTick (ABH clock)
+	NVIC_SetPriority(SysTick_IRQn, NVIC_RTC_IRQ_Pri);
+	SysTick->CTRL = 7;					 // Start SysTick (ABH clock)
+	NVIC_SetPriority(PendSV_IRQn, 0xFF); // background task
 }
 
 void mcu_dotasks()
@@ -932,13 +913,11 @@ void mcu_dotasks()
 #if !defined(DETACH_USB_FROM_MAIN_PROTOCOL)
 		if (mcu_com_rx_cb(c))
 		{
-			if (BUFFER_FULL(usb_rx))
+			if (!BUFFER_TRY_ENQUEUE(usb_rx, &c))
 			{
 				BUFFER_CLEAR(usb_rx);
 				STREAM_OVF(c);
 			}
-
-			BUFFER_ENQUEUE(usb_rx, &c);
 		}
 #else
 		mcu_usb_rx_cb(c);
@@ -1009,9 +988,9 @@ static void mcu_eeprom_erase(void)
 		FLASH->KEYR = 0x45670123;
 		FLASH->KEYR = 0xCDEF89AB;
 	}
-	FLASH->CR = 0;																																							// Ensure PG bit is low
+	FLASH->CR = 0;																				// Ensure PG bit is low
 	FLASH->CR |= FLASH_CR_SER | (((FLASH_SECTORS - 1) << FLASH_CR_SNB_Pos) & FLASH_CR_MER_Msk); // set the SER bit
-	FLASH->CR |= FLASH_CR_STRT;																																	// set the start bit
+	FLASH->CR |= FLASH_CR_STRT;																	// set the start bit
 	while (FLASH->SR & FLASH_SR_BSY)
 		; // wait while busy
 	FLASH->CR = 0;
@@ -1234,7 +1213,7 @@ bool mcu_spi_bulk_transfer(const uint8_t *tx_data, uint8_t *rx_data, uint16_t da
 	{
 		// Wait for transfers to complete
 		if (!(SPI_DMA_TX_ISR >> (SPI_DMA_TX_IFR_POS + 5)) ||
-				(!(SPI_DMA_RX_ISR >> (SPI_DMA_RX_IFR_POS + 5)) && rx_data))
+			(!(SPI_DMA_RX_ISR >> (SPI_DMA_RX_IFR_POS + 5)) && rx_data))
 			return true;
 
 		// SPI hardware still transmitting the last byte
@@ -1269,10 +1248,10 @@ bool mcu_spi_bulk_transfer(const uint8_t *tx_data, uint8_t *rx_data, uint16_t da
 	SPI_DMA_TX_IFCR |= SPI_DMA_TX_IFCR_MASK;
 
 	SPI_DMA_TX_STREAM->CR =
-			(SPI_DMA_TX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
-			(0b01 << DMA_SxCR_PL_Pos) |									 // Set priority to medium
-			DMA_SxCR_MINC |															 // Increment memory
-			(0b01 << DMA_SxCR_DIR_Pos);									 // Memory to peripheral transfer direction
+		(SPI_DMA_TX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
+		(0b01 << DMA_SxCR_PL_Pos) |					 // Set priority to medium
+		DMA_SxCR_MINC |								 // Increment memory
+		(0b01 << DMA_SxCR_DIR_Pos);					 // Memory to peripheral transfer direction
 
 	SPI_DMA_TX_STREAM->PAR = (uint32_t)&SPI_REG->DR;
 	SPI_DMA_TX_STREAM->M0AR = (uint32_t)tx_data;
@@ -1292,10 +1271,10 @@ bool mcu_spi_bulk_transfer(const uint8_t *tx_data, uint8_t *rx_data, uint16_t da
 		SPI_DMA_RX_IFCR |= SPI_DMA_RX_IFCR_MASK;
 
 		SPI_DMA_RX_STREAM->CR =
-				(SPI_DMA_RX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
-				(0b01 << DMA_SxCR_PL_Pos) |									 // Set priority to medium
-				DMA_SxCR_MINC |															 // Increment memory
-				(0b00 << DMA_SxCR_DIR_Pos);									 // Peripheral to memory transfer direction
+			(SPI_DMA_RX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
+			(0b01 << DMA_SxCR_PL_Pos) |					 // Set priority to medium
+			DMA_SxCR_MINC |								 // Increment memory
+			(0b00 << DMA_SxCR_DIR_Pos);					 // Peripheral to memory transfer direction
 
 		SPI_DMA_RX_STREAM->PAR = (uint32_t)&SPI_REG->DR;
 		SPI_DMA_RX_STREAM->M0AR = (uint32_t)rx_data;
@@ -1455,7 +1434,7 @@ bool mcu_spi2_bulk_transfer(const uint8_t *tx_data, uint8_t *rx_data, uint16_t d
 	{
 		// Wait for transfers to complete
 		if (!(SPI2_DMA_TX_ISR >> (SPI2_DMA_TX_IFR_POS + 5)) ||
-				(!(SPI2_DMA_RX_ISR >> (SPI2_DMA_RX_IFR_POS + 5)) && rx_data))
+			(!(SPI2_DMA_RX_ISR >> (SPI2_DMA_RX_IFR_POS + 5)) && rx_data))
 			return true;
 
 		// SPI2 hardware still transmitting the last byte
@@ -1490,10 +1469,10 @@ bool mcu_spi2_bulk_transfer(const uint8_t *tx_data, uint8_t *rx_data, uint16_t d
 	SPI2_DMA_TX_IFCR |= SPI2_DMA_TX_IFCR_MASK;
 
 	SPI2_DMA_TX_STREAM->CR =
-			(SPI2_DMA_TX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
-			(0b01 << DMA_SxCR_PL_Pos) |										// Set priority to medium
-			DMA_SxCR_MINC |																// Increment memory
-			(0b01 << DMA_SxCR_DIR_Pos);										// Memory to peripheral transfer direction
+		(SPI2_DMA_TX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
+		(0b01 << DMA_SxCR_PL_Pos) |					  // Set priority to medium
+		DMA_SxCR_MINC |								  // Increment memory
+		(0b01 << DMA_SxCR_DIR_Pos);					  // Memory to peripheral transfer direction
 
 	SPI2_DMA_TX_STREAM->PAR = (uint32_t)&SPI2_REG->DR;
 	SPI2_DMA_TX_STREAM->M0AR = (uint32_t)tx_data;
@@ -1513,10 +1492,10 @@ bool mcu_spi2_bulk_transfer(const uint8_t *tx_data, uint8_t *rx_data, uint16_t d
 		SPI2_DMA_RX_IFCR |= SPI2_DMA_RX_IFCR_MASK;
 
 		SPI2_DMA_RX_STREAM->CR =
-				(SPI2_DMA_RX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
-				(0b01 << DMA_SxCR_PL_Pos) |										// Set priority to medium
-				DMA_SxCR_MINC |																// Increment memory
-				(0b00 << DMA_SxCR_DIR_Pos);										// Peripheral to memory transfer direction
+			(SPI2_DMA_RX_CHANNEL << DMA_SxCR_CHSEL_Pos) | // Select correct channel
+			(0b01 << DMA_SxCR_PL_Pos) |					  // Set priority to medium
+			DMA_SxCR_MINC |								  // Increment memory
+			(0b00 << DMA_SxCR_DIR_Pos);					  // Peripheral to memory transfer direction
 
 		SPI2_DMA_RX_STREAM->PAR = (uint32_t)&SPI2_REG->DR;
 		SPI2_DMA_RX_STREAM->M0AR = (uint32_t)rx_data;
@@ -1771,7 +1750,7 @@ void mcu_i2c_config(uint32_t frequency)
 	I2C_REG->CR1 &= ~I2C_CR1_NOSTRETCH;
 	// enable events
 	I2C_REG->CR2 |= (I2C_CR2_ITEVTEN | I2C_CR2_ITERREN | I2C_CR2_ITBUFEN);
-	NVIC_SetPriority(I2C_IRQ, 10);
+	NVIC_SetPriority(I2C_IRQ, NVIC_I2C_IRQ_Pri);
 	NVIC_ClearPendingIRQ(I2C_IRQ);
 	NVIC_EnableIRQ(I2C_IRQ);
 #endif
@@ -1917,7 +1896,7 @@ void mcu_config_timeout(mcu_timeout_delgate fp, uint32_t timeout)
 	ONESHOT_TIMER_REG->SR = 0;
 	ONESHOT_TIMER_REG->CNT = 0;
 
-	NVIC_SetPriority(MCU_ONESHOT_IRQ, 1);
+	NVIC_SetPriority(MCU_ONESHOT_IRQ, NVIC_ONESHOT_IRQ_Pri);
 	NVIC_ClearPendingIRQ(MCU_ONESHOT_IRQ);
 	NVIC_EnableIRQ(MCU_ONESHOT_IRQ);
 

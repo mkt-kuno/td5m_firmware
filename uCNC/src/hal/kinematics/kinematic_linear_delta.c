@@ -118,9 +118,9 @@ void kinematics_apply_forward(int32_t *steps, float *axis)
 	// The cross product of the unit x and y is the unit z
 	// float[] ez = vectorCrossProd(ex, ey);
 	float ez[3] = {
-			ex[1] * ey[2] - ex[2] * ey[1],
-			ex[2] * ey[0] - ex[0] * ey[2],
-			ex[0] * ey[1] - ex[1] * ey[0]};
+		ex[1] * ey[2] - ex[2] * ey[1],
+		ex[2] * ey[0] - ex[0] * ey[2],
+		ex[0] * ey[1] - ex[1] * ey[0]};
 
 	// We now have the d, i and j values defined in Wikipedia.
 	// Plug them into the equations defined in Wikipedia for Xnew, Ynew and Znew
@@ -175,24 +175,15 @@ uint8_t kinematics_home(void)
 	}
 #endif
 
-	// unlocks the machine to go to offset
-	cnc_unlock(true);
-	float target[AXIS_COUNT];
-	motion_data_t block_data = {0};
-	mc_get_position(target);
-
-	// pull of only on the Z axis
-	target[AXIS_Z] += ((g_settings.homing_dir_invert_mask & (1 << AXIS_Z)) ? -g_settings.homing_offset : g_settings.homing_offset);
-
-	block_data.feed = g_settings.homing_fast_feed_rate;
-	block_data.spindle = 0;
-	block_data.dwell = 0;
-	// starts offset and waits to finnish
-	error = mc_line(target, &block_data);
-	itp_sync();
-
-	memset(target, 0, sizeof(target));
+#ifndef ENABLE_GRBL_STYLE_HOMING
+	if (!mc_home_motion_pulloff((1 << AXIS_Z), true))
+	{
+		return STATUS_CRITICAL_FAIL;
+	}
+#endif
 #ifndef SET_ORIGIN_AT_HOME_POS
+	float target[AXIS_COUNT];
+	memset(target, 0, sizeof(target));
 	if (g_settings.homing_dir_invert_mask & (1 << AXIS_Z))
 	{
 		target[AXIS_Z] = g_settings.max_distance[AXIS_Z];
@@ -214,22 +205,34 @@ bool kinematics_check_boundaries(float *axis)
 
 	if (axis[AXIS_X] < -delta_base_max_travel || axis[AXIS_X] > delta_base_max_travel)
 	{
+#ifdef ALLOW_SOFT_LIMIT_JOG_MOTION_CLAMPING
+		axis[AXIS_X] = CLAMP(-delta_base_max_travel, axis[AXIS_X], delta_base_max_travel);
+#endif
 		return false;
 	}
 
 	if (axis[AXIS_Y] < -delta_base_max_travel || axis[AXIS_Y] > delta_base_max_travel)
 	{
+#ifdef ALLOW_SOFT_LIMIT_JOG_MOTION_CLAMPING
+		axis[AXIS_Y] = CLAMP(-delta_base_max_travel, axis[AXIS_Y], delta_base_max_travel);
+#endif
 		return false;
 	}
 
 #ifdef SET_ORIGIN_AT_HOME_POS
 	if (axis[AXIS_Z] < -g_settings.max_distance[AXIS_Z] || axis[AXIS_Z] > 0)
 	{
+#ifdef ALLOW_SOFT_LIMIT_JOG_MOTION_CLAMPING
+		axis[AXIS_Z] = CLAMP(-g_settings.max_distance[AXIS_Z], axis[AXIS_Z], 0);
+#endif
 		return false;
 	}
 #else
 	if (axis[AXIS_Z] > g_settings.max_distance[AXIS_Z] || axis[AXIS_Z] < 0)
 	{
+#ifdef ALLOW_SOFT_LIMIT_JOG_MOTION_CLAMPING
+		axis[AXIS_Z] = CLAMP(0, axis[AXIS_Z], g_settings.max_distance[AXIS_Z]);
+#endif
 		return false;
 	}
 #endif
@@ -247,6 +250,9 @@ bool kinematics_check_boundaries(float *axis)
 #endif
 			if (value > g_settings.max_distance[i] || value < 0)
 			{
+#ifdef ALLOW_SOFT_LIMIT_JOG_MOTION_CLAMPING
+				axis[i] = CLAMP(0, value, g_settings.max_distance[i]);
+#endif
 				return false;
 			}
 		}

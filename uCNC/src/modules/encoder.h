@@ -27,6 +27,9 @@ extern "C"
 #include "../module.h"
 #include <stdint.h>
 
+/**
+ * Encoders definitions
+ */
 #define ENC0 0
 #define ENC1 1
 #define ENC2 2
@@ -35,17 +38,42 @@ extern "C"
 #define ENC5 5
 #define ENC6 6
 #define ENC7 7
+/**
+ * Encoders basic types
+ */
+#define ENC_TYPE_PULSE 0
+#define ENC_TYPE_I2C 1
+#define ENC_TYPE_SSI 2
+#define ENC_TYPE_CUSTOM 255
 
 	DECL_MODULE(encoder);
-	DECL_HOOK(encoder_index, void);
+	DECL_HOOK(enc0_index, void);
+	DECL_HOOK(enc1_index, void);
+	DECL_HOOK(enc2_index, void);
+	DECL_HOOK(enc3_index, void);
+	DECL_HOOK(enc4_index, void);
+	DECL_HOOK(enc5_index, void);
+	DECL_HOOK(enc6_index, void);
+	DECL_HOOK(enc7_index, void);
+
+	void enc0_pulse(void);
+	void enc1_pulse(void);
+	void enc2_pulse(void);
+	void enc3_pulse(void);
+	void enc4_pulse(void);
+	void enc5_pulse(void);
+	void enc6_pulse(void);
+	void enc7_pulse(void);
+
 	int32_t encoder_get_position(uint8_t i);
 	void encoder_print_values(void);
 	void encoder_reset_position(uint8_t i, int32_t position);
 	void encoders_reset_position(void);
 	void encoders_itp_reset_rt_position(float *origin);
 	void encoders_update(uint8_t pulse, uint8_t diff);
-	uint16_t encoder_get_rpm(void);
-	extern bool encoder_rpm_updated;
+	uint32_t encoder_get_delta(uint8_t i);
+	uint16_t encoder_get_rpm(uint8_t i);
+	int32_t enc_custom_read(uint8_t i);
 
 #ifdef __cplusplus
 }

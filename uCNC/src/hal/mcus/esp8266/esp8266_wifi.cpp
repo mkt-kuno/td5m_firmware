@@ -104,7 +104,7 @@ extern "C"
 		{
 			if (!strcmp((const char *)&(cmd_params->cmd)[4], "ON"))
 			{
-				__ATOMIC__
+				ATOMIC_CODEBLOCK
 				{
 					WiFi.disconnect();
 					switch (wifi_settings.wifi_mode)
@@ -141,7 +141,7 @@ extern "C"
 
 			if (!strcmp((const char *)&(cmd_params->cmd)[4], "OFF"))
 			{
-				__ATOMIC__
+				ATOMIC_CODEBLOCK
 				{
 					WiFi.disconnect();
 					wifi_settings.wifi_on = 0;
@@ -718,10 +718,35 @@ extern "C"
 	}
 #endif
 
+#ifdef USE_STATIC_IP
+#ifndef STATIC_IP_IP
+// 192.168.1.200
+#define STATIC_IP_IP 3355551936
+#endif
+#ifndef STATIC_IP_GW
+// 192.168.1.1
+#define STATIC_IP_GW 16885952
+#endif
+#ifndef STATIC_IP_SUB
+// 255.255.255.0
+#define STATIC_IP_SUB 16777215
+#endif
+
+	static IPAddress local_IP((uint32_t)(STATIC_IP_IP));
+	static IPAddress gateway((uint32_t)(STATIC_IP_GW));
+	static IPAddress subnet((uint32_t)(STATIC_IP_SUB));
+#endif
+
 	void esp8266_wifi_init()
 	{
 		DBGMSG("Wifi assert");
 #ifdef ENABLE_WIFI
+#ifdef USE_STATIC_IP
+		if (!WiFi.config(local_IP, gateway, subnet))
+		{
+			proto_info("Static IP config failed");
+		}
+#endif
 		DBGMSG("Wifi startup");
 		WiFi.setSleepMode(WIFI_NONE_SLEEP);
 
@@ -766,20 +791,20 @@ extern "C"
 #ifdef MCU_HAS_ENDPOINTS
 		FLASH_FS.begin();
 		flash_fs = {
-				.drive = 'C',
-				.open = flash_fs_open,
-				.read = flash_fs_read,
-				.write = flash_fs_write,
-				.seek = flash_fs_seek,
-				.available = flash_fs_available,
-				.close = flash_fs_close,
-				.remove = flash_fs_remove,
-				.opendir = flash_fs_opendir,
-				.mkdir = flash_fs_mkdir,
-				.rmdir = flash_fs_rmdir,
-				.next_file = flash_fs_next_file,
-				.finfo = flash_fs_info,
-				.next = NULL};
+			.drive = 'C',
+			.open = flash_fs_open,
+			.read = flash_fs_read,
+			.write = flash_fs_write,
+			.seek = flash_fs_seek,
+			.available = flash_fs_available,
+			.close = flash_fs_close,
+			.remove = flash_fs_remove,
+			.opendir = flash_fs_opendir,
+			.mkdir = flash_fs_mkdir,
+			.rmdir = flash_fs_rmdir,
+			.next_file = flash_fs_next_file,
+			.finfo = flash_fs_info,
+			.next = NULL};
 		fs_mount(&flash_fs);
 #endif
 #ifndef CUSTOM_OTA_ENDPOINT
@@ -808,7 +833,7 @@ extern "C"
 	uint8_t mcu_wifi_getc(void)
 	{
 		uint8_t c = 0;
-		BUFFER_DEQUEUE(wifi_rx, &c);
+		BUFFER_TRY_DEQUEUE(wifi_rx, &c);
 		return c;
 	}
 
@@ -823,11 +848,10 @@ extern "C"
 	}
 	void mcu_wifi_putc(uint8_t c)
 	{
-		while (BUFFER_FULL(wifi_tx))
+		while (!BUFFER_TRY_ENQUEUE(wifi_tx, &c))
 		{
 			mcu_wifi_flush();
 		}
-		BUFFER_ENQUEUE(wifi_tx, &c);
 	}
 
 	void mcu_wifi_flush(void)
@@ -865,12 +889,10 @@ extern "C"
 				uint8_t c = (uint8_t)telnet_client.read();
 				if (mcu_com_rx_cb(c))
 				{
-					if (BUFFER_FULL(wifi_rx))
+					if (!BUFFER_TRY_ENQUEUE(wifi_rx, &c))
 					{
 						STREAM_OVF(c);
 					}
-
-					BUFFER_ENQUEUE(wifi_rx, &c);
 				}
 #else
 				mcu_wifi_rx_cb((uint8_t)telnet_client.read());

@@ -303,6 +303,10 @@ extern "C"
 	 * */
 	void mcu_stop_itp_isr(void);
 
+	#ifndef mcu_start_step_reset_timeout
+	#define mcu_start_step_reset_timeout()
+	#endif
+
 /**
  * gets the MCU running time in milliseconds.
  * the time counting is controled by the internal RTC
@@ -347,59 +351,59 @@ extern "C"
 #error "MCU_CYCLES_PER_LOOP not defined for this MCU"
 #endif
 
-#define mcu_delay_cycles(X)                                                                                                             \
-	do                                                                                                                                    \
-	{                                                                                                                                     \
+#define mcu_delay_cycles(X)                                                                                                                 \
+	do                                                                                                                                      \
+	{                                                                                                                                       \
 		if ((X) >= (MCU_CYCLES_LOOP_OVERHEAD + MCU_CYCLES_PER_LOOP)) /* runs at least one loop */                                           \
 		{                                                                                                                                   \
-			mcu_delay_loop((uint16_t)(((X) - MCU_CYCLES_LOOP_OVERHEAD) / MCU_CYCLES_PER_LOOP));                                               \
+			mcu_delay_loop((uint16_t)(((X) - MCU_CYCLES_LOOP_OVERHEAD) / MCU_CYCLES_PER_LOOP));                                             \
 		}                                                                                                                                   \
 		switch (((X) >= (MCU_CYCLES_LOOP_OVERHEAD + MCU_CYCLES_PER_LOOP)) ? (((X) - MCU_CYCLES_LOOP_OVERHEAD) % MCU_CYCLES_PER_LOOP) : (X)) \
 		{                                                                                                                                   \
 		case 15:                                                                                                                            \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 14:                                                                                                                            \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 13:                                                                                                                            \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 12:                                                                                                                            \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 11:                                                                                                                            \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 10:                                                                                                                            \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 9:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 8:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 7:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 6:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 5:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 4:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 3:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 2:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
-			__FALL_THROUGH__                                                                                                                  \
+			asm volatile("nop");                                                                                                            \
+			__FALL_THROUGH__                                                                                                                \
 		case 1:                                                                                                                             \
-			asm volatile("nop");                                                                                                              \
+			asm volatile("nop");                                                                                                            \
 		}                                                                                                                                   \
 	} while (0)
 #endif
@@ -643,6 +647,33 @@ extern "C"
 #endif
 #ifndef mcu_flush
 #define mcu_flush (&mcu_uart_flush)
+#endif
+
+/**
+ * allows to determine the current running context on the MCU
+ * returns true if is in ISR context or false otherwise
+ * */
+#ifndef mcu_in_isr_context
+#include "../../utils.h"
+	extern volatile buffer_index_t mcu_in_isr_context_counter;
+#define mcu_in_isr_context() (ATOMIC_LOAD_N(&mcu_in_isr_context_counter, __ATOMIC_ACQUIRE) != 0)
+	static FORCEINLINE void mcu_in_isr_context_leave(buffer_index_t *c)
+	{
+		ATOMIC_FETCH_SUB(&mcu_in_isr_context_counter, 1, __ATOMIC_ACQ_REL);
+		MEM_BARRIER;
+		(void)c;
+	}
+
+	static FORCEINLINE buffer_index_t mcu_isr_context_enter_init(void)
+	{
+		buffer_index_t c = ATOMIC_FETCH_ADD(&mcu_in_isr_context_counter, 1, __ATOMIC_ACQ_REL);
+		return c;
+	}
+
+#define mcu_isr_context_enter() buffer_index_t isr_context __attribute__((__cleanup__(mcu_in_isr_context_leave))) = mcu_isr_context_enter_init()
+#else
+#define mcu_isr_context_enter()
+#define mcu_in_isr_context_custom_impl
 #endif
 
 #ifdef __cplusplus

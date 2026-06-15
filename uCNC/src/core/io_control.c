@@ -24,6 +24,7 @@
 static uint8_t io_lock_limits_mask;
 #endif
 static uint8_t io_invert_limits_mask;
+static bool io_limits_disabled;
 
 #if ASSERT_PIN(PROBE)
 static volatile bool io_last_probe;
@@ -90,9 +91,17 @@ WEAK_EVENT_HANDLER(probe_disable)
 
 MCU_IO_CALLBACK void mcu_limits_changed_cb(void)
 {
+	mcu_isr_context_enter();
+
 #ifdef DISABLE_ALL_LIMITS
 	return;
 #else
+
+	if (io_limits_disabled)
+	{
+		return;
+	}
+
 	static volatile uint8_t prev_limits = 0;
 	uint8_t limits = io_get_limits();
 	uint8_t limits_diff = prev_limits;
@@ -136,8 +145,12 @@ MCU_IO_CALLBACK void mcu_limits_changed_cb(void)
 
 			itp_lock_stepper(0); // unlocks axis
 #endif
-			itp_stop();
+			cnc_stop(false);
+#if EMULATE_GRBL_STARTUP <= 2
 			cnc_set_exec_state(EXEC_LIMITS);
+#else
+			cnc_set_exec_state(EXEC_LIMITS | EXEC_POSITION_MAYBE_LOST);
+#endif
 #ifdef ENABLE_IO_ALARM_DEBUG
 			io_alarm_limits = limits;
 #endif
@@ -149,6 +162,8 @@ MCU_IO_CALLBACK void mcu_limits_changed_cb(void)
 
 MCU_IO_CALLBACK void mcu_controls_changed_cb(void)
 {
+	mcu_isr_context_enter();
+
 #ifdef DISABLE_ALL_CONTROLS
 	return;
 #else
@@ -164,12 +179,21 @@ MCU_IO_CALLBACK void mcu_controls_changed_cb(void)
 	prev_controls = controls;
 
 #if ASSERT_PIN(ESTOP)
+#if EMULATE_GRBL_STARTUP > 2
+	if (CHECKFLAG((controls & changed), ESTOP_MASK))
+	{
+#ifdef ENABLE_IO_ALARM_DEBUG
+		io_alarm_controls = controls;
+#endif
+		cnc_call_rt_command(CMD_CODE_RESET);
+#else
 	if (CHECKFLAG(controls, ESTOP_MASK))
 	{
 #ifdef ENABLE_IO_ALARM_DEBUG
 		io_alarm_controls = controls;
 #endif
 		cnc_alarm(EXEC_ALARM_EMERGENCY_STOP);
+#endif
 		return; // forces exit
 	}
 #endif
@@ -181,6 +205,10 @@ MCU_IO_CALLBACK void mcu_controls_changed_cb(void)
 #ifdef ENABLE_IO_ALARM_DEBUG
 		io_alarm_controls = controls;
 #endif
+	}
+	if (CHECKFLAG(changed, SAFETY_DOOR_MASK))
+	{
+		cnc_call_rt_command(CMD_CODE_SAFETY_DOOR);
 	}
 #endif
 #if ASSERT_PIN(FHOLD)
@@ -200,6 +228,8 @@ MCU_IO_CALLBACK void mcu_controls_changed_cb(void)
 
 MCU_IO_CALLBACK void mcu_probe_changed_cb(void)
 {
+	mcu_isr_context_enter();
+
 #if !ASSERT_PIN(PROBE)
 	return;
 #else
@@ -219,19 +249,21 @@ MCU_IO_CALLBACK void mcu_probe_changed_cb(void)
 	io_last_probe = probe;
 
 	// stores rt position
-	__ATOMIC__
+	ATOMIC_CODEBLOCK
 	{
 		parser_sync_probe();
 	}
 
 	// instead of stopping the machine does a controlled stop (hold)
 	// itp_stop();
-	cnc_set_exec_state(EXEC_HOLD);
+	cnc_set_exec_state(EXEC_CANCELING);
 #endif
 }
 
 MCU_IO_CALLBACK void mcu_inputs_changed_cb(void)
 {
+	mcu_isr_context_enter();
+
 	static volatile uint8_t prev_inputs = 0;
 	uint8_t inputs = 0;
 	uint8_t diff;
@@ -289,14 +321,14 @@ MCU_IO_CALLBACK void mcu_inputs_changed_cb(void)
 	}
 #endif
 
-#if (ENCODERS > 0)
+#if (ENCODERS_MASK)
 	inputs ^= g_settings.encoders_pulse_invert_mask;
 #endif
 	diff = inputs ^ prev_inputs;
 
 	if (diff)
 	{
-#if (ENCODERS > 0)
+#if (ENCODERS_MASK)
 		encoders_update(inputs, diff);
 #endif
 #ifdef ENABLE_IO_MODULES
@@ -315,13 +347,22 @@ void io_lock_limits(uint8_t limitmask)
 }
 #endif
 
+void io_enable_limits(void)
+{
+	io_limits_disabled = false;
+}
+void io_disable_limits(void)
+{
+	io_limits_disabled = true;
+}
+
 void io_invert_limits(uint8_t limitmask)
 {
 	io_invert_limits_mask = limitmask;
 	mcu_limits_changed_cb();
 }
 
-uint8_t io_get_limits(void)
+uint8_t io_get_raw_limits(void)
 {
 #ifdef DISABLE_ALL_LIMITS
 	return 0;
@@ -362,11 +403,6 @@ uint8_t io_get_limits(void)
 	uint8_t inv = g_settings.limits_invert_mask;
 	uint8_t result = (value ^ (inv & LIMITS_INV_MASK));
 
-	if (cnc_get_exec_state(EXEC_HOMING))
-	{
-		result ^= io_invert_limits_mask;
-	}
-
 #if (LIMITS_NORMAL_OPERATION_MASK != 0)
 	if (!cnc_get_exec_state(EXEC_HOMING))
 	{
@@ -375,6 +411,12 @@ uint8_t io_get_limits(void)
 #endif
 
 	return result;
+}
+
+uint8_t io_get_limits(void)
+{
+	uint8_t result = io_get_raw_limits();
+	return ((!cnc_get_exec_state(EXEC_HOMING)) ? (result) : (result ^ io_invert_limits_mask));
 }
 
 uint8_t io_get_controls(void)
@@ -416,6 +458,7 @@ io_probe_action_cb io_probe_custom_disable = NULL;
 
 void io_enable_probe(void)
 {
+	cnc_set_exec_state(EXEC_PROBING);
 #ifdef PROBE_ENABLE_CUSTOM_CALLBACK
 	if (io_probe_custom_enable)
 	{
@@ -437,6 +480,7 @@ void io_enable_probe(void)
 
 void io_disable_probe(void)
 {
+	cnc_clear_exec_state(EXEC_PROBING | EXEC_STOPPING); // clear probe and pending hold to stop probing motion
 #ifdef PROBE_ENABLE_CUSTOM_CALLBACK
 	if (io_probe_custom_disable)
 	{
@@ -642,22 +686,22 @@ void io_get_steps_pos(int32_t *position)
 	itp_get_rt_position(position);
 #if STEPPERS_ENCODERS_MASK != 0
 #if (defined(STEP0_ENCODER) && AXIS_TO_STEPPERS > 0)
-	position[0] = encoder_get_position(STEP0_ENCODER);
+	position[0] = encoder_get_position(STEP0_ENCODER) * g_settings.encoders_resolution[STEP0_ENCODER];
 #endif
 #if (defined(STEP1_ENCODER) && AXIS_TO_STEPPERS > 1)
-	position[1] = encoder_get_position(STEP1_ENCODER);
+	position[1] = encoder_get_position(STEP1_ENCODER) * g_settings.encoders_resolution[STEP1_ENCODER];
 #endif
 #if (defined(STEP2_ENCODER) && AXIS_TO_STEPPERS > 2)
-	position[2] = encoder_get_position(STEP2_ENCODER);
+	position[2] = encoder_get_position(STEP2_ENCODER) * g_settings.encoders_resolution[STEP2_ENCODER];
 #endif
 #if (defined(STEP3_ENCODER) && AXIS_TO_STEPPERS > 3)
-	position[3] = encoder_get_position(STEP3_ENCODER);
+	position[3] = encoder_get_position(STEP3_ENCODER) * g_settings.encoders_resolution[STEP3_ENCODER];
 #endif
 #if (defined(STEP4_ENCODER) && AXIS_TO_STEPPERS > 4)
-	position[4] = encoder_get_position(STEP4_ENCODER);
+	position[4] = encoder_get_position(STEP4_ENCODER) * g_settings.encoders_resolution[STEP4_ENCODER];
 #endif
 #if (defined(STEP5_ENCODER) && AXIS_TO_STEPPERS > 5)
-	position[5] = encoder_get_position(STEP5_ENCODER);
+	position[5] = encoder_get_position(STEP5_ENCODER) * g_settings.encoders_resolution[STEP5_ENCODER];
 #endif
 #endif
 }
@@ -847,8 +891,6 @@ void io_enable_steppers(uint8_t mask)
 	io_extended_pins_update();
 #endif
 }
-
-
 
 void io_set_pinvalue(uint8_t pin, uint8_t value)
 {

@@ -65,7 +65,7 @@
 #define MCU_CYCLES_PER_LOOP_OVERHEAD 0
 #endif
 
-#define MCU_HAS_UART
+//#define MCU_HAS_UART
 #ifndef UART_PORT_NAME
 #define UART_PORT_NAME "\\\\.\\COM14"
 #endif
@@ -258,8 +258,10 @@
 #define DIO76 76
 #define DOUT30 77
 #define DIO77 77
-#define DOUT31 78
-#define DIO78 78
+#define DOUT31 UNDEF_PIN
+#define DIO78 UNDEF_PIN
+
+#define ACTIVITY_LED UNDEF_PIN
 
 #ifndef EMULATE_74HC165
 #define LIMIT_X 100
@@ -291,6 +293,7 @@
 #define CS_RES 113
 #define DIO113 113
 #define DIN0 130
+#define DIN0_ISR
 #define DIO130 130
 #define DIN1 131
 #define DIO131 131
@@ -435,6 +438,15 @@
 #define RX2 211
 #define DIO211 211
 
+#define DIN0_ISR
+#define DIN1_ISR
+#define DIN2_ISR
+#define DIN3_ISR
+#define DIN4_ISR
+#define DIN5_ISR
+#define DIN6_ISR
+#define DIN7_ISR
+
 #define MCU_HAS_ONESHOT_TIMER
 
 #ifndef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
@@ -458,12 +470,28 @@ extern void virtual_delay_us(uint16_t delay);
 #define mcu_delay_us(X) virtual_delay_us(X)
 
 #include "../../tools/tool.h"
-extern const tool_t spindle_pwm;
+extern const tool_t embroidery_stepper;
 extern const tool_t laser_ppi;
+extern const tool_t laser_pwm;
+extern const tool_t pen_servo;
+extern const tool_t plasma_thc;
+extern const tool_t spindle_besc;
+extern const tool_t spindle_pwm;
+extern const tool_t spindle_relay;
+extern const tool_t vfd_modbus;
+extern const tool_t vfd_pwm;
 
 #define EMULATION_MS_TICK 100
-#define ENABLE_ITP_FEED_TASK
-#define ENABLE_PIN_DEBUG_EXTRA_CMD
+
+#define ATOMIC_LOAD_N(src, mode) __atomic_load_n((src), mode)
+#define ATOMIC_STORE_N(dst, val, mode) __atomic_store_n((dst), (val), mode)
+#define ATOMIC_COMPARE_EXCHANGE_N(dst, cmp, des, sucmode, failmode) __atomic_compare_exchange_n((dst), (void*)(cmp), (des), false, sucmode, failmode)
+#define ATOMIC_FETCH_OR(dst, val, mode) __atomic_fetch_or((dst), (val), mode)
+#define ATOMIC_FETCH_AND(dst, val, mode) __atomic_fetch_and((dst), (val), mode)
+#define ATOMIC_FETCH_ADD(dst, val, mode) __atomic_fetch_add((dst), (val), mode)
+#define ATOMIC_FETCH_SUB(dst, val, mode) __atomic_fetch_sub((dst), (val), mode)
+#define ATOMIC_FETCH_XOR(dst, val, mode) __atomic_fetch_xor((dst), (val), mode)
+#define ATOMIC_SPIN()
 
 #define asm __asm__
 

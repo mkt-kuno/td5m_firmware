@@ -37,7 +37,7 @@ extern "C"
 #define PLANNER_MOTION_EXACT_STOP 64
 #define PLANNER_MOTION_CONTINUOUS 128
 
-#define TOOL_STATE_COPY_FLAG_MASK 0x78
+#define TOOL_STATE_COPY_FLAG_MASK 0x79
 	typedef motion_flags_t planner_flags_t;
 
 	typedef struct planner_block_
@@ -113,6 +113,13 @@ extern "C"
 	void planner_store(void);
 	// restores the planner to it's previous saved state
 	void planner_restore(void);
+#endif
+
+#ifdef ENABLE_PLANNER_MODULES
+	// runs just before a chunk of steps is removed from the current planner block and sent to the step generator buffer
+	void planner_itp_pre_output(void);
+	// event_planner_pre_output_handler
+	DECL_EVENT_HANDLER(planner_pre_output);
 #endif
 
 #ifdef __cplusplus
