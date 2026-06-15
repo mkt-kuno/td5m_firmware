@@ -5,7 +5,7 @@
 ドライバ:TB6600 x5
 
 ## grblファームウェア情報
-uCNC v1.13.0(Grbl 1.13)  
+uCNC v1.16.5
 https://github.com/Paciente8159/uCNC
 
 ### grblよく使うコマンド早見表
