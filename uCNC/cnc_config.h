@@ -463,7 +463,7 @@ extern "C"
  *  No final pulloff offset is performed in this mode as the pulloff is performed per axis and on contact
  *
  */
-//  #define ENABLE_GRBL_STYLE_HOMING
+#define ENABLE_GRBL_STYLE_HOMING
 
 /**
  *
@@ -552,7 +552,7 @@ extern "C"
 	 * If the type of machine need backlash compensation configure here
 	 * */
 
-	// #define ENABLE_BACKLASH_COMPENSATION
+	#define ENABLE_BACKLASH_COMPENSATION
 
 	/**
 	 * Sets the maximum number of step doubling loops carried by the DSS (Dynamic
