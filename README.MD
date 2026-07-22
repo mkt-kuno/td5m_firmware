@@ -39,6 +39,15 @@ Range: 50[mm]
 LoadingTime: 10%の動作->90%の冷却,2分動作->18分休憩  
 SPM: 2400 [step/mm]  
 
+Motor:200 [Step/min]
+Gear1st: 12T
+Gear2nd: 24:12T
+Gear3rd: 30:11T
+GearFinal: 46T
+GearTotal: $ \frac{46}{11} \times \frac{30}{12} \times \frac{24}{12} = \frac{230}{11} = 20.90909091 \approx 21 $
+Rod: M12P1.75
+ActualSPM: $ \frac{200 \times 20.909090}{1.75} = 2389.61 \approx 2400 $
+
 | No-load speed | Load speed | 推力 (Thrust) | 拉力 (Pull) | 自锁力 (Self-locking force) |
 | :--- | :--- | :--- | :--- | :--- |
 | 0.5mm/s (30mm/min)| 0.3mm/s | 900N | 800N | 2000N |
