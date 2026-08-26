@@ -65,11 +65,11 @@ SM青:B2/B-
 
 4本SW版:  
 SW赤-青: Min Limit  
-SW白-黒: Max Limit  
+SW黒-白: Max Limit  
 
-3本SW版(未確定):  
-SW赤-黒: Min Limit  
-SW白-黒: Max Limit  
+3本SW版:  
+SW赤-白: Min Limit  
+SW黒-白: Max Limit  
 
 # 実トルクと軸力の考察
 
