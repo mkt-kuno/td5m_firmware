@@ -39,7 +39,7 @@ Range: 50[mm]
 LoadingTime: 10%の動作->90%の冷却,2分動作->18分休憩  
 SPM: 2400 [step/mm]  
 
-Motor:200 [Step/min]  
+Motor:200 [step/rot]  
 Gear1st: 12T  
 Gear2nd: 24:12T  
 Gear3rd: 30:11T  
