@@ -167,6 +167,16 @@ void MCU_SERIAL2_ISR(void)
 #endif
 
 #ifdef MCU_HAS_USB
+static volatile bool in_usb_dotasks = false;
+
+static inline void mcu_delay_ms(uint32_t ms)
+{
+	while (ms--)
+	{
+		mcu_delay_loop((uint16_t)(F_CPU / (MCU_CYCLES_PER_LOOP * 1000UL)));
+	}
+}
+
 void USB_HP_CAN1_TX_IRQHandler(void)
 {
 	tusb_cdc_isr_handler();
@@ -179,6 +189,7 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 
 void USBWakeUp_IRQHandler(void)
 {
+	EXTI->PR = (1 << 18);
 	tusb_cdc_isr_handler();
 }
 #endif
@@ -489,10 +500,21 @@ void mcu_clocks_init()
 void mcu_usart_init(void)
 {
 #ifdef MCU_HAS_USB
+	// Force USB D+ (PA12) LOW for 15ms to trigger host USB re-enumeration
+	mcu_config_output(USB_DP);
+	mcu_clear_output(USB_DP);
+	mcu_delay_ms(15);
+	mcu_config_input(USB_DP);
+
 	// configure USB as Virtual COM port
 	RCC->APB1ENR &= ~RCC_APB1ENR_USBEN;
 	mcu_config_input(USB_DM);
 	mcu_config_input(USB_DP);
+
+	EXTI->IMR |= (1 << 18);
+	EXTI->RTSR |= (1 << 18);
+	EXTI->PR = (1 << 18);
+
 	NVIC_SetPriority(USB_HP_CAN1_TX_IRQn, NVIC_USB_IRQ_Pri);
 	NVIC_ClearPendingIRQ(USB_HP_CAN1_TX_IRQn);
 	NVIC_EnableIRQ(USB_HP_CAN1_TX_IRQn);
@@ -568,9 +590,15 @@ void mcu_usb_putc(uint8_t c)
 void mcu_usb_flush(void)
 {
 	tusb_cdc_flush();
-	while (!tusb_cdc_write_available())
+	uint32_t timeout = 50000;
+	while (!tusb_cdc_write_available() && --timeout)
 	{
-		mcu_dotasks(); // tinyusb device task
+		if (!in_usb_dotasks)
+		{
+			in_usb_dotasks = true;
+			mcu_dotasks();
+			in_usb_dotasks = false;
+		}
 		if (!tusb_cdc_connected)
 		{
 			return;
@@ -893,6 +921,7 @@ void mcu_dotasks()
 		{
 			if (!BUFFER_TRY_ENQUEUE(usb_rx, &c))
 			{
+				BUFFER_CLEAR(usb_rx);
 				STREAM_OVF(c);
 			}
 		}
