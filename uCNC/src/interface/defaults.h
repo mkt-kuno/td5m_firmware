@@ -204,6 +204,10 @@ extern "C"
 #define DEFAULT_SPINDLE_MIN_RPM 0
 #endif
 
+#if (!defined(DEFAULT_TOOL_MODE))
+#define DEFAULT_TOOL_MODE 0
+#endif
+
 // default homing configuration
 #if (!defined(DEFAULT_HOMING_DIR_INV_MASK))
 #define DEFAULT_HOMING_DIR_INV_MASK 0
@@ -236,6 +240,10 @@ extern "C"
 
 #if (!defined(DEFAULT_DIR_INV_MASK))
 #define DEFAULT_DIR_INV_MASK 0
+#endif
+
+#if (!defined(DEFAULT_STEP_DISABLE_TIMEOUT))
+#define DEFAULT_STEP_DISABLE_TIMEOUT 0
 #endif
 
 // linear delta

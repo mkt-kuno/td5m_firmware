@@ -114,7 +114,7 @@ extern "C"
 	 * Disabling settings safety will make the settins run in legacy more where they are simply reset to default on error without forcing the user to re-check them
 	 */
 
-	//  #define DISABLE_SAFE_SETTINGS
+	#define DISABLE_SAFE_SETTINGS
 
 	/**
 	 * Uncomment to enable G92 storing on non volatile memory
@@ -135,32 +135,35 @@ extern "C"
 	 * define different settings for each axis.
 	 */
 
-	// Defaults below match the settings documented in README.MD ($-numbers in comments).
-	// All 5 axes share the same value, so the scalar macros are used (they expand to every
+	// Defaults below match ALL settings documented in README.md (lines 120-165).
+	// All 5 axes share the same value, so scalar macros are used (they expand to every
 	// axis via AXIS_COUNT). Do NOT also define the matching *_PER_AXIS macro (compile error).
-	#define DEFAULT_STEP_INV_MASK 0			// $2  Step port invert mask
-	#define DEFAULT_DIR_INV_MASK 31			// $3  Dir port invert mask (all axes)
-	#define DEFAULT_STEP_ENA_INV 0			// $4  Step enable invert
-	#define DEFAULT_LIMIT_INV_MASK 31		// $5  Limit logic invert mask (all axes)
-	#define DEFAULT_PROBE_INV_MASK 0		// $6  Probe logic invert
-	#define DEFAULT_SOFT_LIMITS_ENABLED 0	// $20 Soft limits enable
-	#define DEFAULT_HARD_LIMITS_ENABLED 1	// $21 Hard limits enable
-	#define DEFAULT_HOMING_ENABLED 1		// $22 Homing enable
-	#define DEFAULT_HOMING_DIR_INV_MASK 31	// $23 Homing dir invert mask
-	#define DEFAULT_HOMING_FAST 20			// $25 Homing search speed [mm/min]
-	#define DEFAULT_HOMING_SLOW 10			// $24 Homing feed speed [mm/min]
-	#define DEFAULT_HOMING_OFFSET 1			// $27 Homing pull-off distance [mm]
-	#define DEFAULT_STEP_PER_MM 38400		// $100-104 [step/mm] = 2400 step/mm * 16 microstep
-	// #define DEFAULT_STEP_PER_MM_PER_AXIS {38400, 38400, 38400}
-	#define DEFAULT_MAX_FEED 40				// $110-114 max speed [mm/min]
-	// #define DEFAULT_MAX_FEED_PER_AXIS {40, 40, 40}
-	#define DEFAULT_ACCEL 1					// $120-124 acceleration [mm/s^2]
-	// #define DEFAULT_ACCEL_PER_AXIS {1, 1, 1}
-	#define DEFAULT_MAX_DIST 50				// $130-134 max position [mm]
-	// #define DEFAULT_MAX_DIST_PER_AXIS {50, 50, 50}
-	#define DEFAULT_ARC_TOLERANCE 0.002		// $12 arc tolerance [mm]
-	#define DEFAULT_DEBOUNCE_MS 250			// $26 homing debounce [msec]
-
+	// $0  = 10     Step pulse time [us] -> max_step_rate = 1000000 / F_STEP_MAX = 10us (F_STEP_MAX=100000)
+	#define DEFAULT_STEP_DISABLE_TIMEOUT 32767	// $1  = 32767  Step idle delay [ms]
+	#define DEFAULT_STEP_INV_MASK 0				// $2  = 0      Step port invert mask
+	#define DEFAULT_DIR_INV_MASK 31				// $3  = 31     Dir port invert mask (all 5 axes: 0b11111)
+	#define DEFAULT_STEP_ENA_INV 0				// $4  = 0      Step enable invert
+	#define DEFAULT_LIMIT_INV_MASK 31			// $5  = 31     Limit logic invert mask (all 5 axes: 0b11111)
+	#define DEFAULT_PROBE_INV_MASK 0			// $6  = 0      Probe logic invert
+	#define DEFAULT_STATUS_MASK 1				// $10 = 1      Status report options
+	#define DEFAULT_G64_FACTOR 0.020f			// $11 = 0.020  Junction deviation [mm]
+	#define DEFAULT_ARC_TOLERANCE 0.002f		// $12 = 0.002  Arc tolerance [mm]
+	#define DEFAULT_REPORT_INCHES 0				// $13 = 0      Report in inches (0=mm)
+	#define DEFAULT_SOFT_LIMITS_ENABLED 0		// $20 = 0      Soft limits enable
+	#define DEFAULT_HARD_LIMITS_ENABLED 1		// $21 = 1      Hard limits enable
+	#define DEFAULT_HOMING_ENABLED 1			// $22 = 1      Homing enable
+	#define DEFAULT_HOMING_DIR_INV_MASK 31		// $23 = 31     Homing dir invert mask (all 5 axes: 0b11111)
+	#define DEFAULT_HOMING_SLOW 10				// $24 = 10     Homing feed speed [mm/min]
+	#define DEFAULT_HOMING_FAST 20				// $25 = 20     Homing search speed [mm/min]
+	#define DEFAULT_DEBOUNCE_MS 250			// $26 = 250    Homing debounce [ms]
+	#define DEFAULT_HOMING_OFFSET 1				// $27 = 1      Homing pull-off distance [mm]
+	#define DEFAULT_SPINDLE_MAX_RPM 1000		// $30 = 1000   Max spindle speed [RPM]
+	#define DEFAULT_SPINDLE_MIN_RPM 0			// $31 = 0      Min spindle speed [RPM]
+	#define DEFAULT_TOOL_MODE 0					// $32 = 0      Laser mode enable (0=spindle)
+	#define DEFAULT_STEP_PER_MM 38400			// $100..104 = 38400 Step/mm (2400 step/mm * 16 microstep)
+	#define DEFAULT_MAX_FEED 40					// $110..114 = 40    Max feed [mm/min]
+	#define DEFAULT_ACCEL 1						// $120..124 = 1     Acceleration [mm/s^2]
+	#define DEFAULT_MAX_DIST 50					// $130..134 = 50    Max position [mm]
 #if defined(KINEMATIC_LINEAR_DELTA)
 	// #define DEFAULT_LIN_DELTA_ARM_LENGTH 230
 	// #define DEFAULT_LIN_DELTA_BASE_RADIUS 115

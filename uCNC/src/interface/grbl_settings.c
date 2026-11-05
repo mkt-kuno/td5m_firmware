@@ -98,7 +98,7 @@ const settings_t __rom__ default_settings =
 		.version = SETTINGS_VERSION,
 		.max_step_rate = (1000000.0f / F_STEP_MAX),
 #ifdef ENABLE_STEPPERS_DISABLE_TIMEOUT
-		.step_disable_timeout = 0,
+		.step_disable_timeout = DEFAULT_STEP_DISABLE_TIMEOUT,
 #endif
 		.step_invert_mask = DEFAULT_STEP_INV_MASK,
 		.dir_invert_mask = DEFAULT_DIR_INV_MASK,
@@ -123,7 +123,7 @@ const settings_t __rom__ default_settings =
 		.homing_offset = DEFAULT_HOMING_OFFSET,
 		.spindle_max_rpm = DEFAULT_SPINDLE_MAX_RPM,
 		.spindle_min_rpm = DEFAULT_SPINDLE_MIN_RPM,
-		.tool_mode = 0,
+		.tool_mode = DEFAULT_TOOL_MODE,
 #ifdef ENABLE_LASER_PPI
 		.laser_ppi = DEFAULT_LASER_PPI,
 		.laser_ppi_uswidth = DEFAULT_LASER_PPI_USWIDTH,
