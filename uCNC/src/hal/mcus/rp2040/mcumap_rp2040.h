@@ -1198,13 +1198,16 @@ extern "C"
 #define MCU_HAS_USB
 #endif
 #ifdef ENABLE_WIFI
-#define MCU_HAS_WIFI
-#ifndef DISABLE_ENDPOINTS
-#define MCU_HAS_ENDPOINTS
+#ifndef ENABLE_SOCKETS
+#define ENABLE_SOCKETS
 #endif
-#ifndef DISABLE_WEBSOCKETS
-#define MCU_HAS_WEBSOCKETS
 #endif
+
+#ifndef MCU_HAS_FLASHUPDATE
+#define MCU_HAS_FLASHUPDATE
+#endif
+
+#ifdef ENABLE_SOCKETS
 #ifndef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
 #define BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
 #endif
@@ -1350,6 +1353,14 @@ extern "C"
 #endif
 // forces IC74HC595_COUNT to 4 to prevent errors
 #define IC74HC595_COUNT 4
+
+#ifdef IC74HC165_COUNT
+#if (IC74HC165_COUNT > 0)
+#undef IC74HC165_COUNT
+// forces IC74HC165_COUNT to 4 (32 bits) when 74HC165 inputs are enabled
+#define IC74HC165_COUNT 4
+#endif
+#endif
 #endif
 
 #define __timer_irq__(X) TIMER_IRQ_##X
@@ -1409,9 +1420,9 @@ extern "C"
 #define mcu_get_global_isr() (__get_PRIMASK() == 0u)
 #define mcu_in_isr_context() (__get_IPSR() != 0)
 
-#define mcu_free_micros() ((uint32_t)((((SysTick->LOAD + 1) - SysTick->VAL) * 1000UL) / (SysTick->LOAD + 1)))
+#define mcu_free_micros() (mcu_micros() % 1000)
 
-#if (defined(ENABLE_WIFI) || defined(ENABLE_BLUETOOTH))
+#if (defined(ENABLE_SOCKETS) || defined(ENABLE_BLUETOOTH))
 #ifndef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
 #define BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
 #endif

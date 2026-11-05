@@ -21,14 +21,17 @@
 #include <stdbool.h>
 #include <Arduino.h>
 #include <string.h>
-#include "../../../cnc.h"
 
-void rp2040_core1_loop()
+extern "C"
 {
-	rp2040.fifo.registerCore();
-	for (;;)
+#include "../../../cnc.h"
+	void rp2040_core1_loop()
 	{
-		cnc_run();
+		rp2040.fifo.registerCore();
+		for (;;)
+		{
+			cnc_run();
+		}
 	}
 }
 
@@ -38,7 +41,11 @@ void rp2040_core1_loop()
  *
  * **/
 
-#if (defined(MCU_HAS_WIFI) || defined(ENABLE_BLUETOOTH))
+#ifdef MCU_HAS_FLASHUPDATE
+#include <Updater.h>
+#endif
+
+#if (defined(ENABLE_WIFI) || defined(ENABLE_BLUETOOTH))
 
 #ifndef WIFI_SSID_MAX_LEN
 #define WIFI_SSID_MAX_LEN 32
@@ -57,10 +64,11 @@ uint8_t bt_on;
 uint16_t bt_settings_offset;
 #endif
 
-#ifdef MCU_HAS_WIFI
+#ifdef ENABLE_WIFI
+#include <IPAddress.h>
 #include <WiFi.h>
 #include <WebServer.h>
-#include <HTTPUpdateServer.h>
+#include <pico/cyw43_arch.h>
 
 #ifndef TELNET_PORT
 #define TELNET_PORT 23
@@ -87,15 +95,15 @@ uint16_t bt_settings_offset;
 #endif
 
 #ifndef OTA_URI
-#define OTA_URI "/firmware"
+#define OTA_URI "/update"
 #endif
 
-WebServer web_server(WEBSERVER_PORT);
-HTTPUpdateServer httpUpdater;
+// WebServer web_server(WEBSERVER_PORT);
+// HTTPUpdateServer httpUpdater;
 const char *update_username = WIFI_USER;
 const char *update_password = WIFI_PASS;
 #define MAX_SRV_CLIENTS 1
-WiFiServer telnet_server(TELNET_PORT);
+// WiFiServer telnet_server(TELNET_PORT);
 WiFiClient server_client;
 
 typedef struct
@@ -108,6 +116,116 @@ typedef struct
 
 uint16_t wifi_settings_offset;
 wifi_settings_t wifi_settings;
+
+/* wifi_settings.wifi_mode values */
+#define WIFI_SET_MODE_STA_AP 0
+#define WIFI_SET_MODE_STA 1
+#define WIFI_SET_MODE_AP 2
+
+/* interval between "Trying to connect to WiFi" messages while not connected */
+#ifndef WIFI_CONNECT_STATUS_INTERVAL
+#define WIFI_CONNECT_STATUS_INTERVAL 5000
+#endif
+
+static bool wifi_connected = false;
+static uint32_t wifi_next_info = 0;
+
+/* fully stops WiFi (station and access point).
+   WiFi.mode(WIFI_OFF)/WiFi.disconnect() only tear down the station interface,
+   so the access point must be stopped explicitly. */
+static void rp2040_wifi_stop(void)
+{
+	WiFi.disconnect();
+	WiFi.disconnectAP();
+	WiFi.mode(WIFI_OFF);
+}
+
+/* applies the current wifi_settings (STA/AP/STA+AP) */
+static void rp2040_wifi_config(void)
+{
+	/* always stop and re-init to avoid errors when re-applying the settings */
+	rp2040_wifi_stop();
+
+	if (!wifi_settings.wifi_on)
+	{
+		return;
+	}
+
+	wifi_connected = false;
+
+	switch (wifi_settings.wifi_mode)
+	{
+	case WIFI_SET_MODE_STA:
+		WiFi.mode(WIFI_STA);
+		break;
+	case WIFI_SET_MODE_AP:
+		WiFi.mode(WIFI_AP);
+		break;
+	default:
+		WiFi.mode(WIFI_AP_STA);
+		break;
+	}
+
+	if (wifi_settings.wifi_mode != WIFI_SET_MODE_AP)
+	{
+#ifdef USE_STATIC_IP
+		WiFi.config(IPAddress((uint32_t)STATIC_IP_IP), IPAddress((uint32_t)STATIC_IP_GW), IPAddress((uint32_t)STATIC_IP_SUB));
+#endif
+		WiFi.begin((char *)wifi_settings.ssid, (char *)wifi_settings.pass);
+		proto_info("Trying to connect to WiFi");
+		wifi_next_info = mcu_millis() + WIFI_CONNECT_STATUS_INTERVAL;
+	}
+
+	if (wifi_settings.wifi_mode != WIFI_SET_MODE_STA)
+	{
+		WiFi.softAP(BOARD_NAME, (char *)wifi_settings.pass);
+		proto_info("AP started");
+		proto_info("SSID>" BOARD_NAME);
+		proto_info("AP IP>%s", WiFi.softAPIP().toString().c_str());
+	}
+}
+
+/* periodically reports the station connection state (STA/STA+AP modes) */
+static void rp2040_wifi_net_status(void)
+{
+	if (!wifi_settings.wifi_on)
+	{
+		return;
+	}
+
+	/* AP only mode has no station to connect to */
+	if (wifi_settings.wifi_mode == WIFI_SET_MODE_AP)
+	{
+		return;
+	}
+
+	if (WiFi.status() != WL_CONNECTED)
+	{
+		if (wifi_connected)
+		{
+			wifi_connected = false;
+			proto_info("Disconnected from WiFi");
+		}
+
+		if (wifi_next_info <= mcu_millis())
+		{
+			wifi_next_info = mcu_millis() + WIFI_CONNECT_STATUS_INTERVAL;
+			proto_info("Trying to connect to WiFi");
+		}
+		return;
+	}
+
+	if (!wifi_connected)
+	{
+		wifi_connected = true;
+		proto_info("IP>%s", WiFi.localIP().toString().c_str());
+		if (wifi_settings.wifi_mode == WIFI_SET_MODE_STA_AP)
+		{
+			proto_info("AP IP>%s", WiFi.softAPIP().toString().c_str());
+		}
+	}
+}
+
 #endif
 
 #ifdef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
@@ -145,38 +263,13 @@ bool mcu_custom_grbl_cmd(void *args)
 		}
 	}
 #endif
-#ifdef MCU_HAS_WIFI
+#ifdef ENABLE_WIFI
 	if (!strncmp((const char *)(cmd_params->cmd), "WIFI", 4))
 	{
 		if (!strcmp((const char *)&(cmd_params->cmd)[4], "ON"))
 		{
-			WiFi.disconnect();
-			switch (wifi_settings.wifi_mode)
-			{
-			case 1:
-				WiFi.mode(WIFI_STA);
-				WiFi.begin(wifi_settings.ssid, wifi_settings.pass);
-				proto_info("Trying to connect to WiFi");
-				break;
-			case 2:
-				WiFi.mode(WIFI_AP);
-				WiFi.softAP(BOARD_NAME, wifi_settings.pass);
-				proto_info("AP started");
-				proto_info("SSID>" BOARD_NAME);
-				proto_info("IP>%s", WiFi.softAPIP().toString().c_str());
-				break;
-			default:
-				WiFi.mode(WIFI_AP_STA);
-				WiFi.begin(wifi_settings.ssid, wifi_settings.pass);
-				proto_info("Trying to connect to WiFi");
-				WiFi.softAP(BOARD_NAME, wifi_settings.pass);
-				proto_info("AP started");
-				proto_info("SSID>" BOARD_NAME);
-				proto_info("IP>%s", WiFi.softAPIP().toString().c_str());
-				break;
-			}
-
 			wifi_settings.wifi_on = 1;
+			rp2040_wifi_config();
 			settings_save(wifi_settings_offset, (uint8_t *)&wifi_settings, sizeof(wifi_settings_t));
 			*(cmd_params->error) = STATUS_OK;
 			return EVENT_HANDLED;
@@ -184,8 +277,8 @@ bool mcu_custom_grbl_cmd(void *args)
 
 		if (!strcmp((const char *)&(cmd_params->cmd)[4], "OFF"))
 		{
-			WiFi.disconnect();
 			wifi_settings.wifi_on = 0;
+			rp2040_wifi_config();
 			settings_save(wifi_settings_offset, (uint8_t *)&wifi_settings, sizeof(wifi_settings_t));
 			*(cmd_params->error) = STATUS_OK;
 			return EVENT_HANDLED;
@@ -322,15 +415,15 @@ bool mcu_custom_grbl_cmd(void *args)
 			{
 				switch (wifi_settings.wifi_mode)
 				{
-				case 1:
-					proto_info("STA IP>%s", WiFi.localIP().toString().c_str());
-					proto_info("AP IP>%s", WiFi.softAPIP().toString().c_str());
-					break;
-				case 2:
+				case WIFI_SET_MODE_STA:
 					proto_info("IP>%s", WiFi.localIP().toString().c_str());
 					break;
+				case WIFI_SET_MODE_AP:
+					proto_info("AP IP>%s", WiFi.softAPIP().toString().c_str());
+					break;
 				default:
-					proto_info("IP>%s", WiFi.softAPIP().toString().c_str());
+					proto_info("IP>%s", WiFi.localIP().toString().c_str());
+					proto_info("AP IP>%s", WiFi.softAPIP().toString().c_str());
 					break;
 				}
 			}
@@ -350,63 +443,7 @@ bool mcu_custom_grbl_cmd(void *args)
 CREATE_EVENT_LISTENER(grbl_cmd, mcu_custom_grbl_cmd);
 #endif
 
-bool rp2040_wifi_clientok(void)
-{
-#ifdef MCU_HAS_WIFI
-	static uint32_t next_info = 30000;
-	static bool connected = false;
-	uint8_t str[128];
-
-	if (!wifi_settings.wifi_on)
-	{
-		return false;
-	}
-
-	if ((WiFi.status() != WL_CONNECTED))
-	{
-		connected = false;
-		if (next_info > millis())
-		{
-			return false;
-		}
-		next_info = millis() + 30000;
-		proto_info("Disconnected from WiFi");
-		return false;
-	}
-
-	if (!connected)
-	{
-		connected = true;
-		proto_info("Connected to WiFi");
-		proto_info("SSID>%s", wifi_settings.ssid);
-		proto_info("IP>%s", WiFi.localIP().toString().c_str());
-	}
-
-	if (telnet_server.hasClient())
-	{
-		if (server_client)
-		{
-			if (server_client.connected())
-			{
-				server_client.stop();
-			}
-		}
-		server_client = telnet_server.accept();
-		server_client.println("[MSG:New client connected]");
-		return false;
-	}
-	else if (server_client)
-	{
-		if (server_client.connected())
-		{
-			return true;
-		}
-	}
-#endif
-	return false;
-}
-
-#if defined(MCU_HAS_WIFI) && defined(MCU_HAS_ENDPOINTS)
+#ifdef ENABLE_SOCKETS
 
 #define MCU_FLASH_FS_LITTLE_FS 1
 #define MCU_FLASH_FS_SPIFFS 2
@@ -493,13 +530,25 @@ bool flash_fs_info(const char *path, fs_file_info_t *finfo)
 
 fs_file_t *flash_fs_open(const char *path, const char *mode)
 {
+	char sanitized_mode[10];
+	memset(sanitized_mode, 0, sizeof(sanitized_mode));
+	// does not support binary format
+	for (uint8_t i = 0, j = 0; i < strlen(mode); i++)
+	{
+		if (mode[i] != 'b')
+		{
+			sanitized_mode[j] = mode[i];
+			j++;
+		}
+	}
+
 	fs_file_t *fp = (fs_file_t *)calloc(1, sizeof(fs_file_t));
 	if (fp)
 	{
 		fp->file_ptr = calloc(1, sizeof(File));
 		if (fp->file_ptr)
 		{
-			*(static_cast<File *>(fp->file_ptr)) = FLASH_FS.open(path, mode);
+			*(static_cast<File *>(fp->file_ptr)) = FLASH_FS.open(path, sanitized_mode);
 			if (*(static_cast<File *>(fp->file_ptr)))
 			{
 				memset(fp->file_info.full_name, 0, sizeof(fp->file_info.full_name));
@@ -540,253 +589,97 @@ bool flash_fs_rmdir(const char *path)
 	return FLASH_FS.rmdir(path);
 }
 
+#endif
+
 /**
- * Implements the function calls for the enpoints C wrapper
+ * OTA
  */
-#include "../../../modules/endpoint.h"
-void endpoint_add(const char *uri, uint8_t method, endpoint_delegate request_handler, endpoint_delegate file_handler)
+#ifdef MCU_HAS_FLASHUPDATE
+extern "C"
 {
-	if (!method)
+#include "../../../modules/flash_update.h"
+
+	size_t rpico_get_flash_size(void)
 	{
-		method = HTTP_ANY;
+		return (size_t)(0xEFFFFFFF);
 	}
 
-	String s = String(uri);
-
-	if (s.endsWith("*"))
+	bool rpico_flash_begin(size_t filesize)
 	{
-		web_server.on(UriWildcard(s.substring(0, s.length() - 1)), (HTTPMethod)method, request_handler, file_handler);
-	}
-	else
-	{
-		web_server.on(Uri(uri), (HTTPMethod)method, request_handler, file_handler);
-	}
-}
-
-void endpoint_request_uri(char *uri, size_t maxlen)
-{
-	strncpy(uri, web_server.uri().c_str(), maxlen);
-}
-
-int endpoint_request_hasargs(void)
-{
-	return web_server.args();
-}
-
-bool endpoint_request_arg(const char *argname, char *argvalue, size_t maxlen)
-{
-	if (!web_server.hasArg(String(argname)))
-	{
-		argvalue[0] = 0;
-		return false;
-	}
-	strncpy(argvalue, web_server.arg(String(argname)).c_str(), maxlen);
-	return true;
-}
-
-void endpoint_send(int code, const char *content_type, const uint8_t *data, size_t data_len)
-{
-	static uint8_t in_chuncks = 0;
-	if (!content_type)
-	{
-		in_chuncks = 1;
-		web_server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-	}
-	else
-	{
-		switch (in_chuncks)
+#ifdef FLASH_FS
+		if (!FLASH_FS.begin())
 		{
-		case 1:
-			in_chuncks = 2;
-			__FALL_THROUGH__
-		case 0:
-			web_server.send(code, content_type, data, data_len);
-			break;
-		default:
-			if (data)
-			{
-				web_server.sendContent((char *)data, data_len);
-				in_chuncks = 2;
-			}
-			else
-			{
-				web_server.sendContent("");
-				in_chuncks = 0;
-			}
-			break;
+			return false;
 		}
+#endif
+		bool res = Update.begin(filesize, U_FLASH);
+		if (!res)
+		{
+			Update.printError(Serial);
+		}
+		return res;
 	}
-}
 
-void endpoint_send_header(const char *name, const char *data, bool first)
-{
-	web_server.sendHeader(name, data, first);
-}
-
-bool endpoint_send_file(const char *file_path, const char *content_type)
-{
-	if (FLASH_FS.exists(file_path))
+	bool rpico_flash_end(bool flush)
 	{
-		File file = FLASH_FS.open(file_path, "r");
-		web_server.streamFile(file, content_type);
-		file.close();
-		return true;
+		bool res = Update.end(flush);
+		if (!res)
+		{
+			Update.printError(Serial);
+		}
+		return res;
 	}
-	return false;
-}
 
-endpoint_upload_t endpoint_file_upload_status(void)
-{
-	HTTPUpload &upload = web_server.upload();
-	endpoint_upload_t status = {.status = (uint8_t)upload.status, .data = upload.buf, .datalen = upload.currentSize};
-	return status;
-}
-
-uint8_t endpoint_request_method(void)
-{
-	switch (web_server.method())
+	size_t rpico_flash_write(uint8_t *data, size_t len)
 	{
-	case HTTP_GET:
-		return ENDPOINT_GET;
-	case HTTP_POST:
-		return ENDPOINT_POST;
-	case HTTP_PUT:
-		return ENDPOINT_PUT;
-	case HTTP_DELETE:
-		return ENDPOINT_DELETE;
-	default:
-		return (ENDPOINT_OTHER | (uint8_t)web_server.method());
+		size_t res = Update.write(data, len);
+		if (!res)
+		{
+			Update.printError(Serial);
+		}
+		return res;
 	}
-}
 
-void endpoint_file_upload_name(char *filename, size_t maxlen)
-{
-	HTTPUpload &upload = web_server.upload();
-	strncat(filename, upload.filename.c_str(), maxlen - strlen(filename));
-}
+	void rpico_restart(void)
+	{
+		rp2040.reboot();
+	}
 
+	static flash_udpate_t rpico_flashupdate = {.get_flash_size = rpico_get_flash_size, .flash_begin = rpico_flash_begin, .flash_write = rpico_flash_write, .flash_end = rpico_flash_end, .device_restart = rpico_restart};
+}
 #endif
 
-#if defined(MCU_HAS_WIFI) && defined(MCU_HAS_WEBSOCKETS)
-#include "WebSocketsServer.h"
-#include "../../../modules/websocket.h"
-WebSocketsServer socket_server(WEBSOCKET_PORT);
-
-WEAK_EVENT_HANDLER(websocket_client_connected)
+extern "C" void __attribute__((weak)) mcu_network_init(void)
 {
-	DEFAULT_EVENT_HANDLER(websocket_client_connected);
-}
+#ifdef ENABLE_WIFI
+	static bool wifi_boot_init = false;
 
-WEAK_EVENT_HANDLER(websocket_client_disconnected)
-{
-	DEFAULT_EVENT_HANDLER(websocket_client_disconnected);
-}
-
-WEAK_EVENT_HANDLER(websocket_client_receive)
-{
-	DEFAULT_EVENT_HANDLER(websocket_client_receive);
-}
-
-WEAK_EVENT_HANDLER(websocket_client_error)
-{
-	DEFAULT_EVENT_HANDLER(websocket_client_error);
-}
-
-void websocket_send(uint8_t clientid, uint8_t *data, size_t length, uint8_t flags)
-{
-	switch (flags & WS_SEND_TYPE)
+	/* the bring-up may be called more than once, run it only on the initial boot */
+	if (wifi_boot_init)
 	{
-	case WS_SEND_TXT:
-		if (flags & WS_SEND_BROADCAST)
-		{
-			socket_server.broadcastTXT(data, length);
-		}
-		else
-		{
-			socket_server.sendTXT(clientid, data, length);
-		}
-		break;
-	case WS_SEND_BIN:
-		if (flags & WS_SEND_BROADCAST)
-		{
-			socket_server.broadcastTXT(data, length);
-		}
-		else
-		{
-			socket_server.sendTXT(clientid, data, length);
-		}
-		break;
-	case WS_SEND_PING:
-		if (flags & WS_SEND_BROADCAST)
-		{
-			socket_server.broadcastPing(data, length);
-		}
-		else
-		{
-			socket_server.sendPing(clientid, data, length);
-		}
-		break;
+		return;
 	}
-}
-
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
-{
-	websocket_event_t event = {num, (uint32_t)socket_server.remoteIP(num), type, payload, length};
-	switch (type)
-	{
-	case WStype_DISCONNECTED:
-		EVENT_INVOKE(websocket_client_disconnected, &event);
-		break;
-	case WStype_CONNECTED:
-		EVENT_INVOKE(websocket_client_connected, &event);
-		break;
-	case WStype_ERROR:
-		EVENT_INVOKE(websocket_client_error, &event);
-		break;
-	case WStype_TEXT:
-	case WStype_BIN:
-	case WStype_FRAGMENT_TEXT_START:
-	case WStype_FRAGMENT_BIN_START:
-	case WStype_FRAGMENT:
-	case WStype_FRAGMENT_FIN:
-	case WStype_PING:
-	case WStype_PONG:
-		EVENT_INVOKE(websocket_client_receive, &event);
-		break;
-	}
-}
-#endif
+	wifi_boot_init = true;
 
 #ifdef USE_STATIC_IP
-#ifndef STATIC_IP_IP
-// 192.168.1.200
-#define STATIC_IP_IP 3232235976
+	WiFi.config(IPAddress((uint32_t)STATIC_IP_IP), IPAddress((uint32_t)STATIC_IP_GW), IPAddress((uint32_t)STATIC_IP_SUB));
 #endif
-#ifndef STATIC_IP_GW
-// 192.168.1.1
-#define STATIC_IP_GW 3232235777
+	WiFi.mode(WIFI_AP);
+	WiFi.begin((char *)BOARD_NAME, (char *)WIFI_PASS);
+	extern socket_device_t wifi_socket;
+	socket_register_device(&wifi_socket);
+	/* the initial bring-up is only used to initialize the stack/settings, WiFi stays off until requested */
+	rp2040_wifi_stop();
 #endif
-#ifndef STATIC_IP_SUB
-// 255.255.255.0
-#define STATIC_IP_SUB 4294967040
-#endif
+}
 
-	static IPAddress local_IP((uint32_t)(STATIC_IP_IP));
-	static IPAddress gateway((uint32_t)(STATIC_IP_GW));
-	static IPAddress subnet((uint32_t)(STATIC_IP_SUB));
-#endif
-
-void rp2040_wifi_bt_init(void)
+extern "C" void mcu_bt_init(void)
 {
-#ifdef MCU_HAS_WIFI
+}
 
-#ifdef USE_STATIC_IP
-	if (!WiFi.config(local_IP, gateway, subnet))
-	{
-		proto_info("Static IP config failed");
-	}
-#endif
-
+extern "C" void rp2040_wifi_bt_init(void)
+{
+#ifdef ENABLE_WIFI
 	wifi_settings_offset = settings_register_external_setting(sizeof(wifi_settings_t));
 	if (settings_load(wifi_settings_offset, (uint8_t *)&wifi_settings, sizeof(wifi_settings_t)))
 	{
@@ -796,38 +689,10 @@ void rp2040_wifi_bt_init(void)
 		settings_save(wifi_settings_offset, (uint8_t *)&wifi_settings, sizeof(wifi_settings_t));
 	}
 
-	if (wifi_settings.wifi_on)
-	{
-		uint8_t str[64];
+	rp2040_wifi_config();
+#endif
 
-		switch (wifi_settings.wifi_mode)
-		{
-		case 1:
-			WiFi.mode(WIFI_STA);
-			WiFi.begin((char *)wifi_settings.ssid, (char *)wifi_settings.pass);
-			proto_info("Trying to connect to WiFi");
-			break;
-		case 2:
-			WiFi.mode(WIFI_AP);
-			WiFi.softAP(BOARD_NAME, (char *)wifi_settings.pass);
-			proto_info("AP started");
-			proto_info("SSID>" BOARD_NAME);
-			proto_info("IP>%s", WiFi.softAPIP().toString().c_str());
-			break;
-		default:
-			WiFi.mode(WIFI_AP_STA);
-			WiFi.begin((char *)wifi_settings.ssid, (char *)wifi_settings.pass);
-			proto_info("Trying to connect to WiFi");
-			WiFi.softAP(BOARD_NAME, (char *)wifi_settings.pass);
-			proto_info("AP started");
-			proto_info("SSID>" BOARD_NAME);
-			proto_info("IP>%s", WiFi.softAPIP().toString().c_str());
-			break;
-		}
-	}
-	telnet_server.begin();
-	telnet_server.setNoDelay(true);
-#ifdef MCU_HAS_ENDPOINTS
+#ifdef ENABLE_SOCKETS
 	FLASH_FS.begin();
 	flash_fs = {
 		.drive = 'C',
@@ -846,16 +711,11 @@ void rp2040_wifi_bt_init(void)
 		.next = NULL};
 	fs_mount(&flash_fs);
 #endif
-#ifndef CUSTOM_OTA_ENDPOINT
-	httpUpdater.setup(&web_server, OTA_URI, update_username, update_password);
-#endif
-	web_server.begin();
 
-#ifdef MCU_HAS_WEBSOCKETS
-	socket_server.begin();
-	socket_server.onEvent(webSocketEvent);
+#ifdef MCU_HAS_FLASHUPDATE
+	flash_update_register(&rpico_flashupdate);
 #endif
-#endif
+
 #ifdef ENABLE_BLUETOOTH
 	bt_settings_offset = settings_register_external_setting(1);
 	if (settings_load(bt_settings_offset, &bt_on, 1))
@@ -874,60 +734,6 @@ void rp2040_wifi_bt_init(void)
 #endif
 }
 
-#ifdef MCU_HAS_WIFI
-#ifndef WIFI_TX_BUFFER_SIZE
-#define WIFI_TX_BUFFER_SIZE 64
-#endif
-DECL_BUFFER(uint8_t, wifi_tx, WIFI_TX_BUFFER_SIZE);
-DECL_BUFFER(uint8_t, wifi_rx, RX_BUFFER_SIZE);
-
-uint8_t mcu_wifi_getc(void)
-{
-	uint8_t c = 0;
-	BUFFER_TRY_DEQUEUE(wifi_rx, &c);
-	return c;
-}
-
-uint8_t mcu_wifi_available(void)
-{
-	return BUFFER_READ_AVAILABLE(wifi_rx);
-}
-
-void mcu_wifi_clear(void)
-{
-	BUFFER_CLEAR(wifi_rx);
-}
-
-void mcu_wifi_putc(uint8_t c)
-{
-	while (!BUFFER_TRY_ENQUEUE(wifi_tx, &c))
-	{
-		mcu_wifi_flush();
-	}
-}
-
-void mcu_wifi_flush(void)
-{
-	if (rp2040_wifi_clientok())
-	{
-		while (!BUFFER_EMPTY(wifi_tx))
-		{
-			uint8_t tmp[WIFI_TX_BUFFER_SIZE + 1];
-			memset(tmp, 0, sizeof(tmp));
-			uint8_t r;
-
-			BUFFER_READ(wifi_tx, tmp, WIFI_TX_BUFFER_SIZE, r);
-			server_client.write(tmp, r);
-		}
-	}
-	else
-	{
-		// no client (discard)
-		BUFFER_CLEAR(wifi_tx);
-	}
-}
-#endif
-
 #ifdef MCU_HAS_BLUETOOTH
 #ifndef BLUETOOTH_TX_BUFFER_SIZE
 #define BLUETOOTH_TX_BUFFER_SIZE 64
@@ -935,58 +741,51 @@ void mcu_wifi_flush(void)
 DECL_BUFFER(uint8_t, bt_tx, BLUETOOTH_TX_BUFFER_SIZE);
 DECL_BUFFER(uint8_t, bt_rx, RX_BUFFER_SIZE);
 
-uint8_t mcu_bt_getc(void)
+extern "C"
 {
-	uint8_t c = 0;
-	BUFFER_TRY_DEQUEUE(bt_rx, &c);
-	return c;
-}
-
-uint8_t mcu_bt_available(void)
-{
-	return BUFFER_READ_AVAILABLE(bt_rx);
-}
-
-void mcu_bt_clear(void)
-{
-	BUFFER_CLEAR(bt_rx);
-}
-
-void mcu_bt_putc(uint8_t c)
-{
-	while (!BUFFER_TRY_ENQUEUE(bt_tx, &c))
+	uint8_t mcu_bt_getc(void)
 	{
-		mcu_bt_flush();
+		uint8_t c = 0;
+		BUFFER_TRY_DEQUEUE(bt_rx, &c);
+		return c;
 	}
-}
 
-void mcu_bt_flush(void)
-{
-	while (!BUFFER_EMPTY(bt_tx))
+	uint8_t mcu_bt_available(void)
 	{
-		uint8_t tmp[BLUETOOTH_TX_BUFFER_SIZE + 1];
-		memset(tmp, 0, sizeof(tmp));
-		uint8_t r;
+		return BUFFER_READ_AVAILABLE(bt_rx);
+	}
 
-		BUFFER_READ(bt_tx, tmp, BLUETOOTH_TX_BUFFER_SIZE, r);
-		SerialBT.write(tmp, r);
-		SerialBT.flush();
+	void mcu_bt_clear(void)
+	{
+		BUFFER_CLEAR(bt_rx);
+	}
+
+	void mcu_bt_putc(uint8_t c)
+	{
+		while (!BUFFER_TRY_ENQUEUE(bt_tx, &c))
+		{
+			mcu_bt_flush();
+		}
+	}
+
+	void mcu_bt_flush(void)
+	{
+		while (!BUFFER_EMPTY(bt_tx))
+		{
+			uint8_t tmp[BLUETOOTH_TX_BUFFER_SIZE + 1];
+			memset(tmp, 0, sizeof(tmp));
+			uint8_t r = 0;
+
+			BUFFER_READ(bt_tx, tmp, BLUETOOTH_TX_BUFFER_SIZE, r);
+			SerialBT.write(tmp, r);
+			SerialBT.flush();
+		}
 	}
 }
 #endif
 
 uint8_t rp2040_wifi_bt_read(void)
 {
-#ifdef MCU_HAS_WIFI
-	if (rp2040_wifi_clientok())
-	{
-		if (server_client.available() > 0)
-		{
-			return (uint8_t)server_client.read();
-		}
-	}
-#endif
-
 #ifdef ENABLE_BLUETOOTH
 	return (uint8_t)SerialBT.read();
 #endif
@@ -996,34 +795,9 @@ uint8_t rp2040_wifi_bt_read(void)
 
 void rp2040_wifi_bt_process(void)
 {
-#ifdef MCU_HAS_WIFI
-	if (rp2040_wifi_clientok())
-	{
-		while (server_client.available() > 0)
-		{
-#ifndef DETACH_WIFI_FROM_MAIN_PROTOCOL
-			uint8_t c = (uint8_t)server_client.read();
-			if (mcu_com_rx_cb(c))
-			{
-				if (!BUFFER_TRY_ENQUEUE(wifi_rx, &c))
-				{
-					STREAM_OVF(c);
-				}
-			}
-
-#else
-			mcu_wifi_rx_cb((uint8_t)server_client.read());
-#endif
-		}
-	}
-
-	if (wifi_settings.wifi_on)
-	{
-		web_server.handleClient();
-#ifdef MCU_HAS_WEBSOCKETS
-		socket_server.loop();
-#endif
-	}
+#ifdef ENABLE_WIFI
+	cyw43_arch_poll();
+	rp2040_wifi_net_status();
 #endif
 
 #ifdef ENABLE_BLUETOOTH
@@ -1092,23 +866,28 @@ extern "C"
 
 extern "C"
 {
-	void rp2040_uart_init(int baud)
+	void mcu_usb_init(void)
 	{
 #ifdef MCU_HAS_USB
-		Serial.begin(baud);
+		Serial.begin(BAUDRATE);
 #endif
+	}
+
+	void mcu_uart_init(void)
+	{
 #ifdef MCU_HAS_UART
 		COM_UART.setTX(TX_BIT);
 		COM_UART.setRX(RX_BIT);
 		COM_UART.begin(BAUDRATE);
 #endif
+	}
+
+	void mcu_uart2_init(void)
+	{
 #ifdef MCU_HAS_UART2
 		COM2_UART.setTX(TX2_BIT);
 		COM2_UART.setRX(RX2_BIT);
 		COM2_UART.begin(BAUDRATE2);
-#endif
-#if (defined(MCU_HAS_WIFI) || defined(ENABLE_BLUETOOTH))
-		rp2040_wifi_bt_init();
 #endif
 	}
 
@@ -1150,7 +929,7 @@ extern "C"
 		{
 			uint8_t tmp[USB_TX_BUFFER_SIZE + 1];
 			memset(tmp, 0, sizeof(tmp));
-			uint8_t r;
+			uint8_t r = 0;
 
 			BUFFER_READ(usb_tx, tmp, USB_TX_BUFFER_SIZE, r);
 			Serial.write(tmp, r);
@@ -1319,7 +1098,7 @@ extern "C"
 		}
 #endif
 
-#if (defined(MCU_HAS_WIFI) || defined(ENABLE_BLUETOOTH))
+#if (defined(ENABLE_WIFI) || defined(ENABLE_BLUETOOTH))
 		rp2040_wifi_bt_process();
 #endif
 

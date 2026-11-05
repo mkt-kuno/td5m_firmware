@@ -20,6 +20,10 @@
 #include "../cnc.h"
 #include "defaults.h"
 
+#ifndef SETTINGSDBG
+#define SETTINGSDBG(...) ((void)0)
+#endif
+
 #ifndef DISABLE_SAFE_SETTINGS
 uint8_t g_settings_error;
 #endif
@@ -149,7 +153,7 @@ const settings_t __rom__ default_settings =
 #endif
 #endif
 #if ENCODERS > 0
-		.encoders_pulse_invert_mask = DEFAULT_ENCODERS_DIR_INV_MASK,
+		.encoders_pulse_invert_mask = DEFAULT_ENCODERS_PULSE_INV_MASK,
 		.encoders_dir_invert_mask = DEFAULT_ENCODERS_DIR_INV_MASK,
 		.encoders_resolution = DEFAULT_ENCODERS_RESOLUTION,
 #endif
@@ -189,7 +193,7 @@ const setting_id_t __rom__ g_settings_id_table[] = {
 	{.id = 31, .memptr = &g_settings.spindle_min_rpm, .type = SETTING_TYPE_UINT16},
 	{.id = 32, .memptr = &g_settings.tool_mode, .type = SETTING_TYPE_UINT8},
 #ifdef ENABLE_LASER_PPI
-	{.id = 33, .memptr = &g_settings.step_per_mm[0], .type = SETTING_TYPE_FLOAT},
+	{.id = 33, .memptr = &g_settings.laser_ppi, .type = SETTING_TYPE_UINT16},
 	{.id = 34, .memptr = &g_settings.laser_ppi_uswidth, .type = SETTING_TYPE_UINT16},
 	{.id = 35, .memptr = &g_settings.laser_ppi_mixmode_ppi, .type = SETTING_TYPE_FLOAT},
 	{.id = 36, .memptr = &g_settings.laser_ppi_mixmode_uswidth, .type = SETTING_TYPE_FLOAT},
@@ -299,6 +303,7 @@ void settings_init(void)
 		settings_reset(true);
 #endif
 		proto_error(STATUS_SETTING_READ_FAIL);
+		rom_memcpy(&g_settings, &default_settings, sizeof(settings_t));
 		proto_cnc_settings();
 	}
 }
@@ -306,12 +311,12 @@ void settings_init(void)
 uint8_t settings_load(uint16_t address, uint8_t *__ptr, uint16_t size)
 {
 #ifdef RAM_ONLY_SETTINGS
-	DBGMSG("Default settings @ %u", address);
+	SETTINGSDBG("Default settings @ %u", address);
 	if (address == SETTINGS_ADDRESS_OFFSET)
 	{
 		rom_memcpy(&g_settings, &default_settings, sizeof(settings_t));
 	}
-	else
+	else if (__ptr)
 	{
 		size = MAX(size, 1);
 		memset(__ptr, 0, size);
@@ -319,7 +324,7 @@ uint8_t settings_load(uint16_t address, uint8_t *__ptr, uint16_t size)
 	return 0; // loads defaults
 #endif
 
-	DBGMSG("EEPROM load @ %u", address);
+	SETTINGSDBG("EEPROM load @ %u", address);
 
 	// settiing address invalid
 	if (address >= NVM_STORAGE_SIZE)
@@ -336,6 +341,11 @@ uint8_t settings_load(uint16_t address, uint8_t *__ptr, uint16_t size)
 #ifdef ENABLE_SETTINGS_MODULES
 	bool extended_load __attribute__((__cleanup__(EVENT_HANDLER_NAME(settings_extended_load)))) = is_machine_settings;
 #endif
+
+	if (!__ptr)
+	{
+		return 0;
+	}
 
 	nvm_start_read(address);
 	for (uint16_t i = 0; i < size;)
@@ -398,7 +408,7 @@ void settings_save(uint16_t address, uint8_t *__ptr, uint16_t size)
 	return;
 #endif
 
-	DBGMSG("EEPROM save @ %u", address);
+	SETTINGSDBG("EEPROM save @ %u", address);
 
 	if (address >= NVM_STORAGE_SIZE)
 	{
@@ -487,6 +497,16 @@ uint8_t settings_change(setting_offset_t id, float value)
 			}
 		}
 
+		if (id == 20 && value1 && !g_settings.homing_enabled)
+		{
+			return STATUS_SOFT_LIMIT_ERROR;
+		}
+
+		if (id == 22 && !value1)
+		{
+			g_settings.soft_limits_enabled = false;
+		}
+
 		uint8_t count = settings_count();
 		for (uint8_t i = 0; i < count; i++)
 		{
@@ -547,7 +567,7 @@ uint8_t settings_change(setting_offset_t id, float value)
  */
 void settings_erase(uint16_t address, uint8_t *__ptr, uint16_t size)
 {
-	DBGMSG("EEPROM erase @ %u", address);
+	SETTINGSDBG("EEPROM erase @ %u", address);
 	uint8_t empty_startup_block = 0;
 
 	if (address >= NVM_STORAGE_SIZE)

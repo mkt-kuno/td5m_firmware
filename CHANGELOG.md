@@ -6,6 +6,87 @@
 
 # Changelog
 
+## [1.17.3] - 30-10-2026
+
+### Added
+
+- Added RPico 2040/2350 custom PIO IO extender input capabilities to support 74H165 IC's (#1010)
+
+### Fixed
+
+- fixed soft reset not reseting feed overrides to default values (#1001)
+- WiFi behavior normalization for (RP2040/2350, ESP8266 and ESP32) (#1002)
+- fixed interpolatior initialization that affected ESP32 (#1003)
+- fixed the laser pulse-frequency setting ($33) wrote its value into the stepper calibration table instead of the laser frequency, so configuring the laser also corrupted an axis calibration (#1004)
+- fixed the encoder pulse-inversion default reused the direction-inversion default (#1004)
+- fixed the display menu the "Step inv" entry edited the direction mask, the height-map entries all shared a single label, the C-axis backlash entry was never compiled, and settings that accept negative values could not be set below zero. Signed values are now gated to the settings that allow them (#1004)
+- fixed virtual emulator debugging using PIO Debug (#1000)
+- fixed generic bit-banging 74H165 IC's byte ordering (#1009)
+
+## [1.17.2] - 10-10-2026
+
+### Added
+
+- Added pin configuration PIO tests (#997)
+
+### Fixed
+
+- fixed ESP32 PIO build caused by PIO registry changes and errors (#998)
+- fixed stepper enable pin initialization to happen after the actual settings are loaded (#998)
+- modified real time command processing to prevent command drop/overlapping (#998)
+- fixed SAMD21 USB putc and flush functions implementation that lead to communications freezes on other streams (#999)
+- fixed SAMD21 oneshot timer that was running at half the intended speed (#999)
+- fixed servo value wrapping on values above 127 on SAMD21  (#999)
+- fixed SAMD21 PIO build caused by PIO registry changes and errors (#999)
+
+## [1.17.1] - 28-09-2026
+
+### Changed
+
+- Added overloadable µCNC pins for RPico PIO IO extender (#994)
+
+### Fixed
+
+- fixed SPI pin initialization (#988)
+- fixed tool coolant pin intialization (#993)
+- fixed all generic output pin initialization (#996)
+- RPico Wifi fix ENABLE_WIFI and ENABLE_SOCKET mix and Flash Updater independency (#992)
+
+## [1.17.0] - 02-09-2026
+
+### Added
+
+- new network TCP socket based API. This new API provides a common Telnet/WebSocket/Http and raw socket implementation exposing an hardware API backend that can be implemented using LwIP/BSD/other network libraries. (#923) (#982) (#984) (#983)
+- added new unity tests suite to perform some compliance Grbl protocol checkings. These unity tests are also executed on commits and PR merging checks (#988)
+- new motion segmentation strategies an new Lathe motion mode to allow iter-dependent axis/spindle non-linear motions (#966)
+
+### Changed
+
+- reworked initialization calls to align Debug streams, settings loading, network initialization and server listeners startup (#980)
+- minor changes to the encoder module to allow hardware independency on all encoders (#977)
+
+### Fixed
+
+- fixed STM32 PIO build issues due to deleted/erased versions of certain framework packets (#989)
+- fixed ESP8266 wifi random crash due to WiFi task starving (#984)
+- several parser/error report fixes based on the unity tests results (#988)
+
+
+## [1.16.6] - 23-07-2026
+
+[@nakanotakuo](https://github.com/nakanotakuo)	- added MKS Monster8 V2 board configuration (#976) and fixes (#971)(#974) and (#975)
+
+### Added
+
+- added MKS Monster8 V2 board configuration (#976)
+
+### Fixed
+
+- Fixed AVR limits ISR mapping (#971)
+- Fixed IO control conditional filter assertion (#973)
+- Fixed planner compilation with FORCE_GLOBALS_TO_0 (#974)
+- Forced default settings values to be loaded on EEPROM read fail (#975)
+
 ## [1.16.5] - 03-06-2026
 
 ### Fixed
@@ -2100,6 +2181,14 @@ Version 1.1.0 comes with many added features and improvements over the previous 
 
 ### Initial release
 
+[1.17.2]: https://github.com/Paciente8159/uCNC/releases/tag/v1.17.2
+[1.17.1]: https://github.com/Paciente8159/uCNC/releases/tag/v.1.17.1
+[1.17.0]: https://github.com/Paciente8159/uCNC/releases/tag/v1.17.0
+[1.16.6]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.6
+[1.16.5]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.5
+[1.16.4]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.4
+[1.16.3]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.3
+[1.16.2]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.2
 [1.16.1]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.1
 [1.16.0]: https://github.com/Paciente8159/uCNC/releases/tag/v1.16.0
 [1.15.0]: https://github.com/Paciente8159/uCNC/releases/tag/v1.15.0

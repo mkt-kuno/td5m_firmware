@@ -1197,24 +1197,6 @@ extern "C"
 #if (defined(USB_DP) && defined(USB_DM))
 #define MCU_HAS_USB
 #endif
-	// #ifdef ENABLE_WIFI
-	// #define MCU_HAS_WIFI
-	// #ifndef DISABLE_ENDPOINTS
-	// #define MCU_HAS_ENDPOINTS
-	// #endif
-	// #ifndef DISABLE_WEBSOCKETS
-	// #define MCU_HAS_WEBSOCKETS
-	// #endif
-	// #ifndef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
-	// #define BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
-	// #endif
-	// #endif
-	// #ifdef ENABLE_BLUETOOTH
-	// #define MCU_HAS_BLUETOOTH
-	// #ifndef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
-	// #define BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
-	// #endif
-	// #endif
 
 #ifdef MCU_HAS_UART
 #ifndef UART_PORT
@@ -1350,6 +1332,14 @@ extern "C"
 #endif
 // forces IC74HC595_COUNT to 4 to prevent errors
 #define IC74HC595_COUNT 4
+
+#ifdef IC74HC165_COUNT
+#if (IC74HC165_COUNT > 0)
+#undef IC74HC165_COUNT
+// forces IC74HC165_COUNT to 4 (32 bits) when 74HC165 inputs are enabled
+#define IC74HC165_COUNT 4
+#endif
+#endif
 #endif
 
 #define __timer_irq__(X) (TIMER0_IRQ_0 + X)
@@ -1404,13 +1394,24 @@ extern "C"
 #define mcu_micros() to_us_since_boot(get_absolute_time())
 #define mcu_free_micros() (mcu_micros() % 1000)
 
+
 #include "cmsis_gcc.h"
 #define mcu_enable_global_isr __enable_irq
 #define mcu_disable_global_isr __disable_irq
 #define mcu_get_global_isr() (__get_PRIMASK() == 0u)
 #define mcu_in_isr_context() (__get_IPSR() != 0)
 
-#if (defined(ENABLE_WIFI) || defined(ENABLE_BLUETOOTH))
+#ifdef ENABLE_WIFI
+#ifndef ENABLE_SOCKETS
+#define ENABLE_SOCKETS
+#endif
+#endif
+
+#ifndef MCU_HAS_FLASHUPDATE
+#define MCU_HAS_FLASHUPDATE
+#endif
+
+#if (defined(ENABLE_SOCKETS) || defined(ENABLE_BLUETOOTH))
 #ifndef BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
 #define BOARD_HAS_CUSTOM_SYSTEM_COMMANDS
 #endif
