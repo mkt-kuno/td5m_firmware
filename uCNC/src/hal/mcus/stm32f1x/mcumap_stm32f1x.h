@@ -67,7 +67,7 @@ extern "C"
 #define NVIC_SERVO_IRQ_Pri 6
 #define NVIC_RTC_IRQ_Pri 8
 #define NVIC_I2C_IRQ_Pri 9
-#define NVIC_USB_IRQ_Pri 6
+#define NVIC_USB_IRQ_Pri 10
 
 #ifndef MCU_CYCLES_PER_LOOP
 #define MCU_CYCLES_PER_LOOP 4
